@@ -9,13 +9,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchMe, login as apiLogin, type User } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { fetchMe, login as apiLogin, logout as apiLogout, type User } from "@/lib/api";
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -23,19 +24,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const loadUser = useCallback(async () => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     try {
       const me = await fetchMe();
       setUser(me);
     } catch {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
       setUser(null);
     } finally {
       setLoading(false);
@@ -46,19 +41,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, [loadUser]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const tokens = await apiLogin(email, password);
-    localStorage.setItem("access_token", tokens.access_token);
-    localStorage.setItem("refresh_token", tokens.refresh_token);
-    const me = await fetchMe();
-    setUser(me);
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      await apiLogin(email, password);
+      const me = await fetchMe();
+      setUser(me);
+    },
+    [],
+  );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+  const logout = useCallback(async () => {
+    await apiLogout();
     setUser(null);
-  }, []);
+    router.replace("/login");
+  }, [router]);
 
   const value = useMemo(
     () => ({ user, loading, login, logout }),
