@@ -1,11 +1,11 @@
 import csv
 import io
-from datetime import time
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +14,7 @@ from app.dependencies import require_roles
 from app.models.enums import Skill, UserRole
 from app.models.location import Location
 from app.models.notification import NotificationPreference
+from app.models.shift import Shift, ShiftAssignment
 from app.models.staff import AvailabilityException, AvailabilityWindow, StaffLocationCert, StaffProfile, StaffSkill
 from app.models.user import User
 from app.schemas.staff import StaffCreateRequest, StaffLocationBrief, StaffMemberResponse, StaffUpdateRequest
@@ -47,7 +48,30 @@ def _format_availability(windows: list[AvailabilityWindow]) -> tuple[str, str]:
     return f"{day_label} • {tz}", hours
 
 
-def _serialize_user(user: User) -> StaffMemberResponse:
+async def _weekly_assigned_hours(db: AsyncSession, user_ids: list[UUID]) -> dict[UUID, float]:
+    if not user_ids:
+        return {}
+    today = datetime.now(timezone.utc).date()
+    week_start = today - timedelta(days=today.weekday())
+    week_start_dt = datetime.combine(week_start, datetime.min.time(), tzinfo=timezone.utc)
+    week_end_dt = week_start_dt + timedelta(days=7)
+    result = await db.execute(
+        select(
+            ShiftAssignment.user_id,
+            func.sum(func.extract("epoch", Shift.ends_at - Shift.starts_at) / 3600.0),
+        )
+        .join(Shift, ShiftAssignment.shift_id == Shift.id)
+        .where(
+            ShiftAssignment.user_id.in_(user_ids),
+            Shift.starts_at >= week_start_dt,
+            Shift.starts_at < week_end_dt,
+        )
+        .group_by(ShiftAssignment.user_id)
+    )
+    return {row[0]: float(row[1] or 0) for row in result.all()}
+
+
+def _serialize_user(user: User, assigned_hours: float = 0.0) -> StaffMemberResponse:
     profile = user.staff_profile
     loc_briefs = [
         StaffLocationBrief(id=c.location.id, name=c.location.name, timezone=c.location.timezone)
@@ -61,7 +85,7 @@ def _serialize_user(user: User) -> StaffMemberResponse:
         name=user.name,
         role=user.role,
         desired_hours_per_week=profile.desired_hours_per_week if profile else None,
-        assigned_hours=0.0,
+        assigned_hours=round(assigned_hours, 1),
         skills=[SKILL_LABELS.get(s.skill, s.skill.value) for s in user.skills],
         locations=loc_briefs,
         availability_summary=summary,
@@ -99,9 +123,11 @@ def _apply_filters(
     if location_id:
         stmt = stmt.where(
             User.location_certs.any(
-                StaffLocationCert.location_id == location_id,
-                StaffLocationCert.decertified_at.is_(None),
-            )
+                and_(
+                    StaffLocationCert.location_id == location_id,
+                    StaffLocationCert.decertified_at.is_(None),
+                ),
+            ),
         )
     if certification == "multi":
         multi_ids = (
@@ -133,7 +159,9 @@ async def list_staff(
 ):
     stmt = _apply_filters(_load_staff_query(), q, skill, location_id, certification)
     result = await db.execute(stmt)
-    return [_serialize_user(u) for u in result.scalars().unique().all()]
+    users = result.scalars().unique().all()
+    hours_map = await _weekly_assigned_hours(db, [u.id for u in users])
+    return [_serialize_user(u, hours_map.get(u.id, 0.0)) for u in users]
 
 
 @router.get("/export")
@@ -147,7 +175,9 @@ async def export_staff(
 ):
     stmt = _apply_filters(_load_staff_query(), q, skill, location_id, certification)
     result = await db.execute(stmt)
-    rows = [_serialize_user(u) for u in result.scalars().unique().all()]
+    users = result.scalars().unique().all()
+    hours_map = await _weekly_assigned_hours(db, [u.id for u in users])
+    rows = [_serialize_user(u, hours_map.get(u.id, 0.0)) for u in users]
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -180,7 +210,8 @@ async def get_staff(
     staff = result.scalar_one_or_none()
     if not staff:
         raise HTTPException(status_code=404, detail="Staff member not found")
-    return _serialize_user(staff)
+    hours_map = await _weekly_assigned_hours(db, [staff.id])
+    return _serialize_user(staff, hours_map.get(staff.id, 0.0))
 
 
 @router.post("", response_model=StaffMemberResponse, status_code=status.HTTP_201_CREATED)
@@ -230,7 +261,9 @@ async def create_staff(
 
     stmt = _load_staff_query().where(User.id == new_user.id)
     result = await db.execute(stmt)
-    return _serialize_user(result.scalar_one())
+    created = result.scalar_one()
+    hours_map = await _weekly_assigned_hours(db, [created.id])
+    return _serialize_user(created, hours_map.get(created.id, 0.0))
 
 
 @router.patch("/{staff_id}", response_model=StaffMemberResponse)
@@ -276,7 +309,9 @@ async def update_staff(
     await db.commit()
 
     result = await db.execute(_load_staff_query().where(User.id == staff_id))
-    return _serialize_user(result.scalar_one())
+    updated = result.scalar_one()
+    hours_map = await _weekly_assigned_hours(db, [updated.id])
+    return _serialize_user(updated, hours_map.get(updated.id, 0.0))
 
 
 @router.delete("/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)

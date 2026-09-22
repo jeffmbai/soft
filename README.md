@@ -2,10 +2,12 @@
 
 Multi-location shift scheduling platform for the Priority Soft assessment.
 
+**Current phase:** Phase 2 complete (scheduling core). Phase 3 (swaps, notifications) is next.
+
 ## Stack
 
-- **Frontend:** Next.js, TypeScript, Tailwind CSS, TanStack Query
-- **Backend:** FastAPI, SQLAlchemy 2.0 (async), Alembic, JWT auth
+- **Frontend:** Next.js App Router, TypeScript, Tailwind CSS, TanStack Query, Zustand
+- **Backend:** FastAPI, SQLAlchemy 2.0 (async), Alembic, JWT auth (httpOnly cookies via BFF)
 - **Database:** PostgreSQL 16
 
 ## Quick Start (Docker)
@@ -18,18 +20,29 @@ docker compose up --build
 - Backend API: http://localhost:8000
 - API docs: http://localhost:8000/docs
 
-On first startup, migrations run automatically and seed data is loaded.
+On first startup, migrations run automatically and seed data is loaded (including demo shifts).
 
 ## Demo Credentials
 
 All accounts use password: **`password123`**
 
-| Role | Email |
-| --- | --- |
-| Admin | admin@coastaleats.com |
-| Manager (Pacific) | manager.west@coastaleats.com |
-| Manager (Eastern) | manager.east@coastaleats.com |
-| Staff | sam@coastaleats.com |
+| Role | Email | Notes |
+| --- | --- | --- |
+| Admin | admin@coastaleats.com | All locations, staff roster, manager assignment |
+| Manager (Pacific) | manager.west@coastaleats.com | Pier House + Harbor Grill |
+| Manager (Eastern) | manager.east@coastaleats.com | Boardwalk Bistro + Lighthouse Cafe |
+| Staff | sam@coastaleats.com | Example staff account |
+
+## Phase 2 Features
+
+| Area | Route | Who |
+| --- | --- | --- |
+| Operations dashboard | `/dashboard` | Admin, Manager |
+| Weekly schedule | `/schedule` | Admin, Manager |
+| Staff roster | `/users` | Admin |
+| Locations + managers | `/locations` | Admin |
+| My schedule | `/my-schedule` | Staff |
+| Availability | `/availability` | Staff |
 
 ## Local Development (without Docker)
 
@@ -40,10 +53,10 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Start Postgres locally, then:
 export DATABASE_URL=postgresql+asyncpg://shiftsync:shiftsync@localhost:5432/shiftsync
 alembic upgrade head
 python -m scripts.seed
+python -m scripts.seed scheduling
 uvicorn app.main:app --reload
 ```
 
@@ -61,16 +74,33 @@ npm run dev
 soft/
 ├── backend/
 │   ├── app/
-│   │   ├── models/      # SQLAlchemy models
-│   │   ├── routers/     # API routes
-│   │   ├── schemas/     # Pydantic schemas
-│   │   └── security.py  # JWT + bcrypt
-│   ├── alembic/         # DB migrations
-│   └── scripts/seed.py  # Demo data
+│   │   ├── models/
+│   │   ├── routers/       # auth, locations, staff, scheduling, availability
+│   │   ├── services/      # constraints, access, audit
+│   │   └── schemas/
+│   ├── alembic/
+│   └── scripts/seed.py
 ├── frontend/
-│   └── src/
-│       ├── app/           # App Router pages
-│       ├── providers/     # Auth + Query providers
-│       └── lib/api.ts     # API client
+│   ├── app/               # Next.js routes
+│   ├── components/pages/  # ScheduleView, DashboardView, UsersView, …
+│   ├── stores/            # Zustand (scheduleUiStore)
+│   └── lib/api.ts
+├── docs/
+│   ├── phase-1-decisions.md
+│   ├── phase-2-decisions.md
+│   └── role-permissions.md
 └── docker-compose.yml
 ```
+
+## Documentation
+
+- [Phase 1 decisions](docs/phase-1-decisions.md)
+- [Phase 2 decisions](docs/phase-2-decisions.md)
+- [Role permissions](docs/role-permissions.md)
+
+## Known Limitations
+
+- Email is simulated (not real SMTP)
+- Swaps/notifications not yet implemented (Phase 3)
+- No WebSocket live updates yet (Phase 4)
+- Clock-in / on-duty uses shift time windows only
