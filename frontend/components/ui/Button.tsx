@@ -13,9 +13,9 @@ const variants: Record<ButtonVariant, string> = {
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "px-2.5 py-1 text-label-md rounded-lg gap-1",
+  sm: "px-2.5 py-1 text-label-md rounded-xl gap-1",
   md: "px-3.5 py-2 text-label-md rounded-xl gap-1.5",
-  lg: "px-4 py-2.5 text-body-sm rounded-xl gap-2",
+  lg: "px-4 py-2.5 text-body-sm rounded-2xl gap-2",
 };
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {

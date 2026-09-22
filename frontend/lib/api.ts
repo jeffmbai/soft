@@ -40,6 +40,36 @@ export async function fetchLocations(): Promise<Location[]> {
   return data;
 }
 
+export type ManagerBrief = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type LocationOverview = Location & {
+  managers: ManagerBrief[];
+};
+
+export async function fetchLocationsOverview(): Promise<LocationOverview[]> {
+  const { data } = await api.get<LocationOverview[]>("/locations/overview");
+  return data;
+}
+
+export async function fetchManagers(): Promise<ManagerBrief[]> {
+  const { data } = await api.get<ManagerBrief[]>("/locations/managers");
+  return data;
+}
+
+export async function setLocationManagers(
+  locationId: string,
+  managerIds: string[],
+): Promise<LocationOverview> {
+  const { data } = await api.put<LocationOverview>(`/locations/${locationId}/managers`, {
+    manager_ids: managerIds,
+  });
+  return data;
+}
+
 export type StaffLocationBrief = {
   id: string;
   name: string;
@@ -114,4 +144,184 @@ function cleanParams(params?: StaffListParams): StaffListParams | undefined {
   if (params.location_id) out.location_id = params.location_id;
   if (params.certification) out.certification = params.certification;
   return Object.keys(out).length ? out : undefined;
+}
+
+
+// --- Scheduling ---
+
+export type Skill = "bartender" | "line_cook" | "server" | "host";
+export type ShiftStatus = "draft" | "published";
+
+export interface AssignmentBrief {
+  id: string;
+  user_id: string;
+  user_name: string;
+  status: string;
+}
+
+export interface ShiftResponse {
+  id: string;
+  location_id: string;
+  starts_at: string;
+  ends_at: string;
+  required_skill: Skill;
+  headcount: number;
+  status: ShiftStatus;
+  version: number;
+  assignments: AssignmentBrief[];
+}
+
+export interface ScheduleWeekResponse {
+  location_id: string;
+  week_start: string;
+  published_at: string | null;
+  is_published: boolean;
+  shifts: ShiftResponse[];
+}
+
+export interface Violation {
+  rule: string;
+  message: string;
+  severity: "error" | "warning";
+}
+
+export interface Suggestion {
+  user_id: string;
+  name: string;
+  reason: string;
+}
+
+export interface AssignResult {
+  success: boolean;
+  assignment_id: string | null;
+  violations: Violation[];
+  suggestions: Suggestion[];
+}
+
+export interface MyShift {
+  assignment_id: string;
+  shift_id: string;
+  location_id: string;
+  location_name: string;
+  location_timezone: string;
+  starts_at: string;
+  ends_at: string;
+  required_skill: Skill;
+  status: ShiftStatus;
+}
+
+export interface AvailabilityWindowInput {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface AvailabilityExceptionInput {
+  date: string;
+  is_available: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+export interface AvailabilityData {
+  timezone: string;
+  windows: AvailabilityWindowInput[];
+  exceptions: AvailabilityExceptionInput[];
+}
+
+export async function fetchSchedule(locationId: string, week: string): Promise<ScheduleWeekResponse> {
+  const { data } = await api.get<ScheduleWeekResponse>(`/locations/${locationId}/schedule`, {
+    params: { week },
+  });
+  return data;
+}
+
+export type ShiftCreatePayload = {
+  required_skill: Skill;
+  headcount: number;
+  starts_at?: string;
+  ends_at?: string;
+  local_date?: string;
+  local_start_time?: string;
+  local_end_time?: string;
+};
+
+export async function createShift(
+  locationId: string,
+  payload: ShiftCreatePayload,
+): Promise<ShiftResponse> {
+  const { data } = await api.post<ShiftResponse>(`/locations/${locationId}/shifts`, payload);
+  return data;
+}
+
+export async function assignShift(shiftId: string, userId: string, overrideReason?: string): Promise<AssignResult> {
+  const { data } = await api.post<AssignResult>(`/shifts/${shiftId}/assign`, {
+    user_id: userId,
+    override_reason: overrideReason ?? null,
+  });
+  return data;
+}
+
+export async function previewAssign(shiftId: string, userId: string): Promise<AssignResult> {
+  const { data } = await api.post<AssignResult>(`/shifts/${shiftId}/assign/preview`, { user_id: userId });
+  return data;
+}
+
+export async function unassign(assignmentId: string): Promise<void> {
+  await api.delete(`/assignments/${assignmentId}`);
+}
+
+export async function publishWeek(locationId: string, weekStart: string): Promise<void> {
+  await api.post(`/locations/${locationId}/weeks/${weekStart}/publish`);
+}
+
+export async function unpublishWeek(locationId: string, weekStart: string): Promise<void> {
+  await api.post(`/locations/${locationId}/weeks/${weekStart}/unpublish`);
+}
+
+export async function fetchMyShifts(week?: string): Promise<MyShift[]> {
+  const { data } = await api.get<MyShift[]>("/my/shifts", { params: week ? { week } : {} });
+  return data;
+}
+
+export async function fetchMyAvailability(): Promise<AvailabilityData> {
+  const { data } = await api.get<AvailabilityData>("/me/availability");
+  return data;
+}
+
+export async function updateMyAvailability(payload: AvailabilityData): Promise<AvailabilityData> {
+  const { data } = await api.put<AvailabilityData>("/me/availability", payload);
+  return data;
+}
+
+export const SKILL_LABELS: Record<Skill, string> = {
+  bartender: "Bartender",
+  line_cook: "Line Cook",
+  server: "Server",
+  host: "Host",
+};
+
+export function formatShiftRange(startsAt: string, endsAt: string, timezone: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  };
+  const fmt = new Intl.DateTimeFormat("en-US", opts);
+  const tzShort = timezone.split("/").pop()?.replace("_", " ") ?? timezone;
+  return `${fmt.format(new Date(startsAt))} – ${fmt.format(new Date(endsAt))} ${tzShort}`;
+}
+
+export function mondayOfWeek(d = new Date()): string {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  return date.toISOString().slice(0, 10);
+}
+
+export function addWeeks(isoDate: string, weeks: number): string {
+  const d = new Date(isoDate + "T12:00:00");
+  d.setDate(d.getDate() + weeks * 7);
+  return d.toISOString().slice(0, 10);
 }

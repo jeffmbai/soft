@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
@@ -19,9 +21,40 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+function MenuLink({
+  href,
+  icon,
+  label,
+  onNavigate,
+}: {
+  href: string;
+  icon: string;
+  label: string;
+  onNavigate: () => void;
+}) {
+  const pathname = usePathname();
+  const active = pathname === href;
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className={cn(
+        "w-full flex items-center gap-2.5 px-3 py-2 font-label-md text-label-md transition-colors",
+        active
+          ? "bg-secondary/10 text-secondary font-semibold"
+          : "text-on-surface-variant hover:bg-surface-container-low hover:text-primary",
+      )}
+    >
+      <Icon name={icon} size={18} />
+      {label}
+    </Link>
+  );
+}
+
 export default function UserMenu({ name, role, onLogout }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const close = () => setOpen(false);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -41,7 +74,7 @@ export default function UserMenu({ name, role, onLogout }: UserMenuProps) {
           open ? "bg-surface-container-high" : "hover:bg-surface-container-low",
         )}
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-on-secondary-container text-on-secondary flex items-center justify-center text-[11px] font-bold shadow-sm ring-2 ring-surface-container-lowest">
+        <div className="w-8 h-8 rounded-xl bg-secondary text-on-secondary flex items-center justify-center text-[11px] font-bold shadow-sm ring-2 ring-surface-container-lowest">
           {initials(name)}
         </div>
         <div className="hidden lg:flex flex-col items-start leading-none">
@@ -63,20 +96,8 @@ export default function UserMenu({ name, role, onLogout }: UserMenuProps) {
             <p className="font-label-md text-label-md font-semibold text-primary">{name}</p>
             <p className="font-data-mono text-data-mono text-[10px] text-outline capitalize">{role}</p>
           </div>
-          <button
-            type="button"
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-left font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors"
-          >
-            <Icon name="person" size={18} />
-            Profile
-          </button>
-          <button
-            type="button"
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-left font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-low hover:text-primary transition-colors"
-          >
-            <Icon name="settings" size={18} />
-            Settings
-          </button>
+          <MenuLink href="/profile" icon="person" label="Profile" onNavigate={close} />
+          <MenuLink href="/settings" icon="settings" label="Settings" onNavigate={close} />
           {onLogout && (
             <>
               <div className="my-1 border-t border-outline-variant" />

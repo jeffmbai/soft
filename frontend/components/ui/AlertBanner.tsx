@@ -18,17 +18,17 @@ type AlertBannerProps = {
 
 const styles = {
   error: {
-    wrap: "bg-error-container border-l-4 border-error text-on-error-container",
-    icon: "bg-on-error text-error",
+    wrap: "bg-surface-container-lowest border border-error/30 text-on-surface",
+    icon: "bg-error-container text-error",
     title: "text-error",
   },
   warning: {
-    wrap: "bg-surface-container-lowest border-l-4 border-error border border-outline-variant",
+    wrap: "bg-surface-container-lowest border border-outline-variant",
     icon: "bg-error-container text-error",
     title: "text-primary",
   },
   info: {
-    wrap: "bg-surface-container-low border-l-4 border-secondary",
+    wrap: "bg-surface-container-lowest border border-outline-variant",
     icon: "bg-secondary/10 text-secondary",
     title: "text-primary",
   },

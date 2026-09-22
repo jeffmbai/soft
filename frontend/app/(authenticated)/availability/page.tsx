@@ -1,5 +1,5 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+import AvailabilityView from "@/components/pages/AvailabilityView";
 
 export default function Page() {
-  return <PlaceholderPage title="Availability" description="Availability editor — Phase 2" />;
+  return <AvailabilityView />;
 }

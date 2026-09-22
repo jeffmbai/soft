@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
+import { useScheduleUiStore } from "@/stores/scheduleUiStore";
 import { mainNav, type NavItem } from "./nav-config";
 
 type SidebarProps = {
@@ -11,14 +12,15 @@ type SidebarProps = {
 };
 
 const navSections: Record<string, { title: string; hrefs: string[] }> = {
-  operations: {
-    title: "Operations",
-    hrefs: ["/schedule", "/on-duty", "/open-shifts", "/swaps", "/my-schedule", "/availability"],
-  },
   overview: {
     title: "Overview",
     hrefs: ["/dashboard"],
   },
+  operations: {
+    title: "Operations",
+    hrefs: ["/schedule", "/on-duty", "/open-shifts", "/swaps", "/my-schedule", "/availability"],
+  },
+  
   admin: {
     title: "Administration",
     hrefs: ["/users", "/locations"],
@@ -61,6 +63,8 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
+  const triggerPublish = useScheduleUiStore((s) => s.triggerPublish);
+  const isSchedule = pathname.startsWith("/schedule");
   const items = mainNav.filter((item) => item.roles.includes(role));
 
   const sections = Object.values(navSections)
@@ -75,7 +79,7 @@ export default function Sidebar({ role }: SidebarProps) {
       {/* Brand */}
       <div className="px-4 pt-5 pb-4">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-secondary to-on-secondary-container flex items-center justify-center shadow-md ring-1 ring-white/10 group-hover:scale-[1.02] transition-transform">
+          <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shadow-md ring-1 ring-white/10 group-hover:scale-[1.02] transition-transform">
             <Icon name="calendar_month" size={22} className="text-on-secondary" />
           </div>
           <div className="flex flex-col">
@@ -94,7 +98,14 @@ export default function Sidebar({ role }: SidebarProps) {
         <div className="px-4 mb-4">
           <button
             type="button"
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-secondary text-on-secondary font-label-md text-label-md hover:bg-on-secondary-container active:scale-[0.99] transition-all shadow-lg shadow-secondary/20"
+            onClick={() => isSchedule && triggerPublish()}
+            disabled={!isSchedule}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-label-md text-label-md active:scale-[0.99] transition-all shadow-lg",
+              isSchedule
+                ? "bg-secondary text-on-secondary hover:bg-on-secondary-container shadow-secondary/20"
+                : "bg-white/10 text-on-primary-container/50 cursor-not-allowed shadow-none",
+            )}
           >
             <Icon name="publish" size={18} />
             <span>Publish Schedule</span>
@@ -126,18 +137,28 @@ export default function Sidebar({ role }: SidebarProps) {
       <div className="p-4 border-t border-white/8">
         <div className="flex gap-1">
           <Link
-            href="#"
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-on-primary-container hover:text-inverse-on-surface hover:bg-white/5 font-label-md text-label-md transition-colors"
+            href="/profile"
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg font-label-md text-label-md transition-colors",
+              pathname === "/profile"
+                ? "bg-secondary/15 text-secondary"
+                : "text-on-primary-container hover:text-inverse-on-surface hover:bg-white/5",
+            )}
+          >
+            <Icon name="person" size={16} />
+            <span className="text-[11px]">Profile</span>
+          </Link>
+          <Link
+            href="/settings"
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg font-label-md text-label-md transition-colors",
+              pathname === "/settings"
+                ? "bg-secondary/15 text-secondary"
+                : "text-on-primary-container hover:text-inverse-on-surface hover:bg-white/5",
+            )}
           >
             <Icon name="settings" size={16} />
             <span className="text-[11px]">Settings</span>
-          </Link>
-          <Link
-            href="#"
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-on-primary-container hover:text-inverse-on-surface hover:bg-white/5 font-label-md text-label-md transition-colors"
-          >
-            <Icon name="help" size={16} />
-            <span className="text-[11px]">Support</span>
           </Link>
         </div>
       </div>

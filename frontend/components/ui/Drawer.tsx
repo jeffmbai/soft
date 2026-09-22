@@ -70,7 +70,7 @@ export function DrawerCloseButton({ onClose }: { onClose: () => void }) {
     <button
       type="button"
       onClick={onClose}
-      className="p-2 rounded-full text-on-primary-container hover:text-inverse-on-surface hover:bg-white/10 transition-colors"
+      className="p-2 rounded-xl text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors"
     >
       <Icon name="close" size={20} />
     </button>

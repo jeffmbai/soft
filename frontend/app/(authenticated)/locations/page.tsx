@@ -1,5 +1,5 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+import LocationsView from "@/components/pages/LocationsView";
 
 export default function Page() {
-  return <PlaceholderPage title="Locations" description="Admin location management — Phase 2+" />;
+  return <LocationsView />;
 }
