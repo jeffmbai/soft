@@ -1,288 +1,377 @@
 "use client";
 
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import Loading from "@/components/Loading";
 import {
-  AlertBanner,
   Avatar,
   Badge,
   Button,
   Card,
+  ConfirmationModal,
   Icon,
-  MetricsRow,
-  PageHeader,
-  SegmentedControl,
-  StatCard,
 } from "@/components/ui";
+import {
+  acceptSwap,
+  approveSwap,
+  cancelSwap,
+  claimOpenShift,
+  fetchOpenShifts,
+  fetchSwapRequests,
+  formatShiftRange,
+  SKILL_LABELS,
+  SWAP_STATUS_LABELS,
+  type SwapRequestResponse,
+} from "@/lib/api";
+import type { Skill } from "@/lib/api";
+import { useAuth } from "@/providers/AuthProvider";
+import { cn } from "@/lib/cn";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
-const metrics = [
-  { label: "Unfilled Shifts", value: "2", tone: "error" as const },
-  { label: "Awaiting Manager", value: "1", tone: "default" as const },
-  { label: "Peer Swaps Open", value: "3", tone: "secondary" as const },
-  { label: "Weekly OT Guard", value: "0.0h", tone: "muted" as const },
-];
+type SwapAction = "accept" | "approve" | "cancel" | "claim";
+type ViewTab = "pool" | "activity";
 
-const unitPools = [
-  { name: "Unit Alpha Floor", tz: "PT", open: 1, note: "100% Core Roles Covered", urgent: false },
-  { name: "Unit Beta Kitchen", tz: "PT", open: 2, note: "1 Drop Pending Claim", urgent: true },
-  { name: "Unit Gamma Hall", tz: "ET", open: 0, note: "Full Evening Coverage", urgent: false },
-  { name: "Unit Delta Bistro", tz: "ET", open: 0, note: "Roster Locked for Tomorrow", urgent: false },
-];
+type PendingConfirm = {
+  swapId: string;
+  action: SwapAction;
+  item: SwapRequestResponse;
+};
 
-export default function OpenShiftsView() {
-  const [requestFilter, setRequestFilter] = useState("all");
+function initials(name: string): string {
+  return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function shiftHours(startsAt: string, endsAt: string): string {
+  return `${((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 3600000).toFixed(1)}h`;
+}
+
+function formatShiftDate(startsAt: string, timezone: string) {
+  const d = new Date(startsAt);
+  return {
+    weekday: d.toLocaleDateString("en-US", { weekday: "long", timeZone: timezone }),
+    shortDay: d.toLocaleDateString("en-US", { weekday: "short", timeZone: timezone }),
+    day: d.toLocaleDateString("en-US", { day: "numeric", timeZone: timezone }),
+    month: d.toLocaleDateString("en-US", { month: "short", timeZone: timezone }),
+  };
+}
+
+function tzLabel(timezone: string): string {
+  return timezone.split("/").pop()?.replace("_", " ") ?? timezone;
+}
+
+function ShiftSummary({ item }: { item: SwapRequestResponse }) {
+  const skill = item.shift.required_skill as Skill;
+  return (
+    <div className="space-y-2 text-sm">
+      <p className="font-semibold text-slate-900">{item.shift.location_name}</p>
+      <p className="text-slate-600">
+        {formatShiftRange(item.shift.starts_at, item.shift.ends_at, item.shift.location_timezone)}
+      </p>
+      <div className="flex gap-2">
+        <Badge variant="outline">{SKILL_LABELS[skill]}</Badge>
+        <span className="text-xs text-slate-500 font-data-mono">
+          {shiftHours(item.shift.starts_at, item.shift.ends_at)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function confirmCopy(action: SwapAction, item: SwapRequestResponse) {
+  switch (action) {
+    case "claim":
+      return { title: "Claim this shift?", description: "This shift will be added to your schedule.", confirmLabel: "Claim shift", variant: "default" as const, icon: "event_available" };
+    case "accept":
+      return { title: "Accept swap request?", description: `You'll take ${item.requester.name}'s shift. A manager must approve.`, confirmLabel: "Accept swap", variant: "default" as const, icon: "swap_horiz" };
+    case "approve":
+      return { title: item.type === "drop" ? "Approve drop?" : "Approve swap?", description: item.type === "drop" ? "Shift moves to the open pool." : "Assignments will update.", confirmLabel: "Approve", variant: "default" as const, icon: "done_all" };
+    case "cancel":
+      return { title: "Cancel this request?", description: "The shift stays on the original assignee.", confirmLabel: "Cancel request", variant: "danger" as const, icon: "cancel" };
+  }
+}
+
+function DateBadge({ startsAt, timezone, featured = false }: { startsAt: string; timezone: string; featured?: boolean }) {
+  const date = formatShiftDate(startsAt, timezone);
+  return (
+    <div
+      className={cn(
+        "shrink-0 w-18 flex flex-col items-center justify-center rounded-lg border text-center py-2.5",
+        featured ? "bg-slate-800 text-white border-slate-800" : "bg-slate-50 text-slate-900 border-slate-200",
+      )}
+    >
+      <span className={cn("font-data-mono uppercase tracking-wider text-[9px]", featured ? "text-slate-300" : "text-slate-500")}>{date.shortDay}</span>
+      <span className="text-2xl font-bold leading-none mt-0.5">{date.day}</span>
+      <span className={cn("font-data-mono text-[9px] mt-0.5", featured ? "text-slate-300" : "text-slate-500")}>{date.month}</span>
+    </div>
+  );
+}
+
+function PoolShiftCard({
+  item,
+  featured = false,
+  viewerIsStaff,
+  onClaim,
+}: {
+  item: SwapRequestResponse;
+  featured?: boolean;
+  viewerIsStaff: boolean;
+  onClaim: () => void;
+}) {
+  const skill = item.shift.required_skill as Skill;
+  const date = formatShiftDate(item.shift.starts_at, item.shift.location_timezone);
+  const range = formatShiftRange(item.shift.starts_at, item.shift.ends_at, item.shift.location_timezone);
+  const eligible = item.can_claim;
+  const poolOpen = item.status === "approved" && item.type === "drop";
+  const dimmed = viewerIsStaff && !eligible;
 
   return (
-    <div className="flex flex-col gap-space-lg">
-      <AlertBanner
-        variant="warning"
-        icon="lock_clock"
-        title="Schedule Freeze & Cutoff Policy Active"
-        badge="STRICT ENFORCEMENT"
-        description="Shifts freeze 48h prior to start. Late swaps require manager override. Peer releases trigger expedited review."
-        actions={[
-          { label: "Override Code", variant: "outline" },
-          { label: "View Labor Rules", variant: "primary" },
-        ]}
-      />
-
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <PageHeader
-          title="Open Shifts Pool & Coverage Marketplace"
-          description="Real-time swap requests, drop mitigation, and compliance checks across all units."
-          badge={
-            <Badge variant="live" mono className="border border-secondary">
-              LIVE DISPATCH
+    <article
+      className={cn(
+        "rounded-xl border bg-white overflow-hidden",
+        featured ? "border-slate-300 shadow-sm" : "border-slate-200",
+        dimmed && "opacity-75",
+      )}
+    >
+      <div className={cn("p-4 flex gap-4", featured && "sm:p-5")}>
+        <DateBadge startsAt={item.shift.starts_at} timezone={item.shift.location_timezone} featured={featured && (eligible || !viewerIsStaff)} />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-slate-900">{item.shift.location_name}</h3>
+              <p className="text-sm text-slate-500 mt-0.5">{date.weekday} · {range}</p>
+            </div>
+            <Badge variant="outline" mono className="shrink-0 text-[10px]">
+              {eligible || (!viewerIsStaff && poolOpen) ? "OPEN" : "UNAVAILABLE"}
             </Badge>
-          }
-        />
-        <MetricsRow metrics={metrics} />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-space-lg">
-        <section className="xl:col-span-8 flex flex-col gap-space-md">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <Icon name="sync_alt" size={20} className="text-secondary" />
-              <h2 className="font-headline-md text-headline-md text-primary">Active Shift Swap & Drop Requests</h2>
-            </div>
-            <SegmentedControl
-              label="Filter:"
-              options={[
-                { id: "all", label: "All (3)" },
-                { id: "swaps", label: "Swaps" },
-                { id: "drops", label: "Drops" },
-                { id: "cancelled", label: "Cancelled" },
-              ]}
-              value={requestFilter}
-              onChange={setRequestFilter}
-              size="sm"
-            />
           </div>
-
-          <Card>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-surface-container-high">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="default" mono className="bg-primary text-on-primary rounded">SWAP-REQ #842</Badge>
-                <Badge variant="warning">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                  Awaiting Manager Approval
-                </Badge>
-                <span className="font-data-mono text-data-mono text-outline">Staff B accepted 14m ago</span>
-              </div>
-              <div className="flex items-center gap-1 font-data-mono text-data-mono text-on-surface-variant">
-                <Icon name="verified_user" size={16} className="text-secondary" />
-                Both compliant, 0 OT risk, rest window 14h
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-11 gap-3 items-center py-4">
-              {[
-                { initials: "SA", name: "Staff A", role: "Role A • Unit Alpha", tag: "Giving Up", shift: "Sat Oct 25 • 18:00 - 01:00", detail: "7.0h Scheduled • Main Station", claim: false },
-                null,
-                { initials: "SB", name: "Staff B", role: "Role A • Lead", tag: "Claiming", shift: "Takes: Sat Oct 25 • 18:00 - 01:00", detail: "Weekly Total Post-Swap: 36.0h", claim: true },
-              ].map((side, i) =>
-                side === null ? (
-                  <div key="connector" className="md:col-span-1 flex justify-center">
-                    <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
-                      <Icon name="swap_horiz" size={20} />
-                    </div>
-                  </div>
-                ) : (
-                  <div key={side.initials} className="md:col-span-5 bg-surface-container-low p-3 rounded-lg border border-outline-variant">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Avatar initials={side.initials} size="sm" variant={side.claim ? "secondary" : "default"} className={!side.claim ? "bg-primary-container text-on-primary rounded-full" : "rounded-full"} />
-                        <div>
-                          <div className="font-title-sm text-title-sm text-primary leading-tight">{side.name}</div>
-                          <div className="font-data-mono text-data-mono text-outline">{side.role}</div>
-                        </div>
-                      </div>
-                      <Badge variant={side.claim ? "live" : "default"} mono>{side.tag}</Badge>
-                    </div>
-                    <div className="bg-surface-container-lowest p-2 rounded border border-outline-variant flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon name={side.claim ? "event_available" : "event"} size={18} className="text-secondary" />
-                        <div>
-                          <div className="font-label-md text-label-md text-primary">{side.shift}</div>
-                          <div className="font-data-mono text-data-mono text-outline">{side.detail}</div>
-                        </div>
-                      </div>
-                      <span className="font-data-mono text-data-mono text-secondary font-bold">PT</span>
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-surface-container-high">
-              <div className="flex items-center gap-2">
-                <Icon name="check_circle" size={16} className="text-secondary" />
-                <span className="font-data-mono text-data-mono text-on-surface-variant">Rest standard verified (local labor law)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">Decline</Button>
-                <Button variant="secondary" size="sm" icon="done_all">Approve Swap</Button>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-surface-container-high">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="default" mono className="bg-primary text-on-primary rounded">DROP-REQ #843</Badge>
-                <Badge variant="secondary" className="flex items-center gap-1">
-                  <Icon name="campaign" size={14} />
-                  Up for Grabs Pool
-                </Badge>
-                <span className="font-data-mono text-data-mono text-error font-bold flex items-center gap-1">
-                  <Icon name="timer" size={14} />
-                  Expires in 18h
-                </span>
-              </div>
-              <Badge variant="outline" mono>3 Eligible Bidders</Badge>
-            </div>
-            <div className="py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Avatar initials="SE" size="md" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-title-sm text-title-sm text-primary">Staff E</span>
-                    <span className="font-data-mono text-data-mono text-outline">• Role C, Unit Alpha</span>
-                  </div>
-                  <div className="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-2 mt-0.5">
-                    <span className="font-bold text-primary">Sun Oct 26 • 11:00 - 17:00</span>
-                    <span>(6.0h Shift)</span>
-                  </div>
-                </div>
-              </div>
-              <Button variant="primary" size="sm">Assign Best Match</Button>
-            </div>
-          </Card>
-        </section>
-
-        <section className="xl:col-span-4 flex flex-col gap-space-md">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Icon name="psychology" size={20} className="text-secondary" />
-              <h2 className="font-headline-md text-headline-md text-primary">Smart Auto-Coverage</h2>
-            </div>
-            <Badge variant="live" mono>AUTO MATCH</Badge>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">{SKILL_LABELS[skill]}</span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">{shiftHours(item.shift.starts_at, item.shift.ends_at)}</span>
+            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">{tzLabel(item.shift.location_timezone)}</span>
           </div>
-
-          <Card className="flex flex-col gap-space-md">
-            <div className="bg-surface-container-low p-space-sm rounded-lg border border-outline-variant">
-              <div className="flex items-center justify-between text-outline font-data-mono text-data-mono text-[11px] uppercase">
-                <span>Target Open Shift</span>
-                <span className="text-error font-bold">PRIORITY HIGH</span>
-              </div>
-              <div className="mt-1">
-                <div className="font-title-sm text-title-sm text-primary">Lead Role — Station A</div>
-                <div className="font-body-sm text-body-sm text-on-surface-variant">Tonight, Sat Oct 25 • 17:30 - 23:30 (6.0h)</div>
-              </div>
-            </div>
-
-            {[
-              { initials: "SF", name: "Staff F", match: "98% SKILL MATCH", ot: "0.0h (Safe)", best: true },
-              { initials: "SG", name: "Staff G", match: "87% Match", ot: "+1.2h OT", best: false },
-            ].map((c) => (
-              <div key={c.initials} className={`border rounded-lg p-3 relative ${c.best ? "border-secondary" : "border-outline-variant"}`}>
-                {c.best && (
-                  <div className="absolute -top-2.5 right-3 bg-secondary text-on-secondary font-badge-mono text-[10px] px-2 py-0.5 rounded-full font-bold">
-                    {c.match}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <Avatar initials={c.initials} size="sm" variant={c.best ? "secondary" : "default"} className="rounded-full" />
-                  <div>
-                    <div className="font-title-sm text-title-sm text-primary">{c.name}</div>
-                    <div className="font-data-mono text-data-mono text-outline text-[11px]">Role A • 1.4 mi away</div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5 my-2.5 bg-surface-container-low p-2 rounded text-center">
-                  {[
-                    { label: "OT Risk", value: c.ot },
-                    { label: "Rest Turn", value: "16.5h" },
-                    { label: "Fairness", value: "+12 Pts" },
-                  ].map((stat) => (
-                    <div key={stat.label}>
-                      <div className="font-data-mono text-data-mono text-[10px] text-outline">{stat.label}</div>
-                      <div className="font-data-mono text-data-mono text-secondary font-bold">{stat.value}</div>
-                    </div>
-                  ))}
-                </div>
-                <Button variant={c.best ? "secondary" : "outline"} size="sm" fullWidth>
-                  {c.best ? "Dispatch Shift" : "Offer Shift"}
-                </Button>
-              </div>
-            ))}
-
-            <div className="border border-error bg-error-container/20 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <Avatar initials="SH" size="sm" variant="error" className="rounded-full" />
-                <div>
-                  <div className="font-title-sm text-title-sm text-primary flex items-center gap-1.5">
-                    Staff H
-                    <Icon name="block" size={16} className="text-error" />
-                  </div>
-                  <div className="font-data-mono text-data-mono text-outline text-[11px]">Lead • Certified</div>
-                </div>
-                <Badge variant="error" mono className="ml-auto font-bold bg-error text-on-error">BLOCKED</Badge>
-              </div>
-              <div className="mt-2.5 bg-error-container border-l-2 border-error p-2 rounded-r">
-                <div className="font-label-md text-label-md text-on-error-container font-bold flex items-center gap-1">
-                  <Icon name="warning" size={14} />
-                  Statutory Rest Breach
-                </div>
-                <p className="font-data-mono text-data-mono text-on-error-container text-[11px] mt-0.5">
-                  Blocked: rest window under 10h between shifts.
-                </p>
-              </div>
-            </div>
-          </Card>
-        </section>
-      </div>
-
-      <Card>
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-space-sm border-b border-surface-container-high gap-2">
-          <div className="flex items-center gap-2">
-            <Icon name="hub" size={20} className="text-secondary" />
-            <h3 className="font-headline-md text-headline-md text-primary">Inter-Unit Coverage Matrix</h3>
-            <span className="font-data-mono text-data-mono text-outline">Dual Timezone (PT & ET)</span>
-          </div>
+          <p className="text-xs text-slate-500">
+            {item.requester.name === "Open shift" ? "In the open pool" : `Released by ${item.requester.name}`}
+          </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-space-sm pt-space-sm">
-          {unitPools.map((unit) => (
-            <StatCard
-              key={unit.name}
-              label={unit.name}
-              value={String(unit.open)}
-              sub={unit.note}
-              alert={unit.urgent}
-              className="!p-3"
-            />
+      </div>
+      <div className="px-4 pb-4">
+        {eligible ? (
+          <Button variant={featured ? "primary" : "outline"} fullWidth size="sm" onClick={onClaim}>
+            Claim shift
+          </Button>
+        ) : (
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            {item.claim_block_reason ?? (viewerIsStaff ? "Not eligible to claim" : "Available for staff to claim")}
+          </p>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function RequestCard({ item, onAction }: { item: SwapRequestResponse; onAction: (action: SwapAction) => void }) {
+  const skill = item.shift.required_skill as Skill;
+  const range = formatShiftRange(item.shift.starts_at, item.shift.ends_at, item.shift.location_timezone);
+  const needsAction = item.can_accept || item.can_approve || item.can_claim || item.can_cancel;
+
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex gap-3">
+        <Avatar initials={initials(item.requester.name)} size="md" variant="default" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" mono className="text-[10px]">{item.type}</Badge>
+            <Badge variant="default" className="text-[10px]">{SWAP_STATUS_LABELS[item.status]}</Badge>
+            <Badge variant="outline" className="text-[10px]">{SKILL_LABELS[skill]}</Badge>
+          </div>
+          <p className="font-medium text-slate-900 text-sm">{item.shift.location_name}</p>
+          <p className="text-xs text-slate-500">{range}</p>
+          {item.type === "swap" && item.target ? (
+            <p className="text-xs text-slate-600">{item.requester.name} → {item.target.name}</p>
+          ) : (
+            <p className="text-xs text-slate-600">{item.requester.name}</p>
+          )}
+        </div>
+      </div>
+      {needsAction && (
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
+          {item.can_accept && <Button variant="outline" size="sm" onClick={() => onAction("accept")}>Accept</Button>}
+          {item.can_approve && <Button variant="primary" size="sm" onClick={() => onAction("approve")}>Approve</Button>}
+          {item.can_claim && <Button variant="primary" size="sm" onClick={() => onAction("claim")}>Claim</Button>}
+          {item.can_cancel && <Button variant="outline" size="sm" onClick={() => onAction("cancel")}>Cancel</Button>}
+        </div>
+      )}
+    </article>
+  );
+}
+
+export default function OpenShiftsView() {
+  const { user } = useAuth();
+  const isStaff = user?.role === "staff";
+  const isManager = user?.role === "admin" || user?.role === "manager";
+  const [view, setView] = useState<ViewTab>(isStaff ? "pool" : "activity");
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: openPool, isLoading: poolLoading } = useQuery({ queryKey: ["open-shifts"], queryFn: fetchOpenShifts });
+  const { data: requests, isLoading: reqLoading } = useQuery({ queryKey: ["swap-requests"], queryFn: fetchSwapRequests });
+
+  const mutation = useMutation({
+    mutationFn: async ({ swapId, action }: { swapId: string; action: SwapAction }) => {
+      if (action === "accept") return acceptSwap(swapId);
+      if (action === "approve") return approveSwap(swapId);
+      if (action === "cancel") return cancelSwap(swapId);
+      return claimOpenShift(swapId);
+    },
+    onSuccess: (_, { action }) => {
+      setPending(null);
+      const msg: Record<SwapAction, string> = { claim: "Shift claimed", approve: "Request approved", accept: "Swap accepted", cancel: "Request cancelled" };
+      toastSuccess(msg[action]);
+      void queryClient.invalidateQueries({ queryKey: ["swap-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["open-shifts"] });
+      void queryClient.invalidateQueries({ queryKey: ["my-shifts"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (err) => { toastApiError(err, "Action failed"); setPending(null); },
+  });
+
+  const pendingApproval = useMemo(() => (requests ?? []).filter((r) => r.status === "pending_manager"), [requests]);
+  const myActivity = useMemo(() => {
+    if (!user) return [];
+    return (requests ?? []).filter(
+      (r) => !(r.type === "drop" && r.status === "approved") && (r.requester.id === user.id || r.target?.id === user.id),
+    );
+  }, [requests, user]);
+
+  const claimable = (openPool ?? []).filter((r) => r.can_claim);
+  const locked = (openPool ?? []).filter((r) => !r.can_claim);
+  const poolCount = openPool?.length ?? 0;
+  const activityList = isStaff ? myActivity : (requests ?? []).filter((r) => r.status !== "approved" || r.type === "swap");
+
+  if (poolLoading || reqLoading) return <Loading variant="inline" message="Loading open shifts…" />;
+
+  const confirm = pending ? confirmCopy(pending.action, pending.item) : null;
+  const tabs: { id: ViewTab; label: string; count: number }[] = isStaff
+    ? [{ id: "pool", label: "Open pool", count: poolCount }, { id: "activity", label: "My activity", count: myActivity.length }]
+    : [{ id: "activity", label: "Requests", count: pendingApproval.length }, { id: "pool", label: "Open pool", count: poolCount }];
+
+  return (
+    <div className="flex flex-col gap-5 pb-10 max-w-5xl">
+      <header className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-5 sm:px-6">
+        <h1 className="font-headline-md text-headline-md font-bold text-slate-900">Open Shifts Pool</h1>
+        <p className="text-sm text-slate-600 mt-1">
+          {isStaff
+            ? "Claim released shifts that match your skills."
+            : "Approve drop and swap requests via notifications. The open pool shows shifts waiting for staff to claim."}
+        </p>
+        {isManager && pendingApproval.length > 0 && (
+          <p className="text-sm text-slate-700 mt-3 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 w-fit">
+            <Icon name="notifications" size={16} className="text-slate-500" />
+            {pendingApproval.length} pending — check notifications to approve
+          </p>
+        )}
+        <div className="flex gap-4 mt-4">
+          {[
+            { label: "Open", value: poolCount },
+            { label: isStaff ? "Claimable" : "In pool", value: isStaff ? claimable.length : poolCount },
+            { label: "Pending", value: pendingApproval.length },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <p className="text-xl font-bold text-slate-900">{s.value}</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-data-mono">{s.label}</p>
+            </div>
           ))}
         </div>
-      </Card>
+      </header>
+
+      <div className="flex gap-1 p-1 rounded-lg bg-slate-100 border border-slate-200 w-fit">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setView(tab.id)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              view === tab.id ? "bg-white text-slate-900 shadow-sm border border-slate-200" : "text-slate-600 hover:text-slate-900",
+            )}
+          >
+            {tab.label}
+            <span className="text-[10px] font-data-mono px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {view === "pool" ? (
+        <div className="space-y-6">
+          {claimable.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-slate-900">Available to you</h2>
+              <div className="space-y-3">
+                {claimable.map((item) => (
+                  <PoolShiftCard
+                    key={item.id}
+                    item={item}
+                    featured
+                    viewerIsStaff={isStaff}
+                    onClaim={() => setPending({ swapId: item.id, action: "claim", item })}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          {locked.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-slate-900">
+                {isStaff ? (claimable.length ? "Other open shifts" : "Open shifts") : "Open pool — staff can claim these"}
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {locked.map((item) => (
+                  <PoolShiftCard
+                    key={item.id}
+                    item={item}
+                    viewerIsStaff={isStaff}
+                    onClaim={() => setPending({ swapId: item.id, action: "claim", item })}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          {poolCount === 0 && (
+            <Card className="py-12 text-center border-dashed border-slate-200">
+              <p className="text-slate-900 font-medium">No open shifts</p>
+              <p className="text-sm text-slate-500 mt-1">Approved drops appear here for staff to claim.</p>
+            </Card>
+          )}
+        </div>
+      ) : (
+        <section className="space-y-3">
+          {activityList.length === 0 ? (
+            <Card className="py-10 text-center border-slate-200">
+              <p className="text-slate-500 text-sm">No active requests</p>
+            </Card>
+          ) : (
+            activityList.map((item) => (
+              <RequestCard key={item.id} item={item} onAction={(action) => setPending({ swapId: item.id, action, item })} />
+            ))
+          )}
+        </section>
+      )}
+
+      {pending && confirm && (
+        <ConfirmationModal
+          open
+          title={confirm.title}
+          description={confirm.description}
+          confirmLabel={confirm.confirmLabel}
+          variant={confirm.variant}
+          icon={confirm.icon}
+          loading={mutation.isPending}
+          onClose={() => !mutation.isPending && setPending(null)}
+          onConfirm={() => mutation.mutate({ swapId: pending.swapId, action: pending.action })}
+        >
+          <ShiftSummary item={pending.item} />
+        </ConfirmationModal>
+      )}
     </div>
   );
 }

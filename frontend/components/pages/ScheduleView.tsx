@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import { addDays, isDatePast, isShiftPast } from "@/lib/schedule-utils";
 import { cn } from "@/lib/cn";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 const SKILLS: Skill[] = ["bartender", "line_cook", "server", "host"];
 
@@ -80,7 +81,11 @@ export default function ScheduleView() {
 
   const publish = useMutation({
     mutationFn: () => publishWeek(activeLocationId, weekStart),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] });
+      toastSuccess("Week published", "Staff can now see their shifts.");
+    },
+    onError: (err) => toastApiError(err, "Could not publish week"),
   });
 
   useEffect(() => {

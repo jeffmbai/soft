@@ -279,8 +279,13 @@ export async function unpublishWeek(locationId: string, weekStart: string): Prom
   await api.post(`/locations/${locationId}/weeks/${weekStart}/unpublish`);
 }
 
-export async function fetchMyShifts(week?: string): Promise<MyShift[]> {
-  const { data } = await api.get<MyShift[]>("/my/shifts", { params: week ? { week } : {} });
+export async function fetchMyShifts(options?: { week?: string; upcoming?: boolean }): Promise<MyShift[]> {
+  const params: Record<string, string | boolean> = {};
+  if (options?.week) params.week = options.week;
+  if (options?.upcoming) params.upcoming = true;
+  const { data } = await api.get<MyShift[]>("/my/shifts", {
+    params: Object.keys(params).length ? params : undefined,
+  });
   return data;
 }
 
@@ -325,3 +330,132 @@ export function addWeeks(isoDate: string, weeks: number): string {
   d.setDate(d.getDate() + weeks * 7);
   return d.toISOString().slice(0, 10);
 }
+
+// --- Swaps & notifications ---
+
+export type SwapType = "swap" | "drop";
+export type SwapStatus =
+  | "pending_counterparty"
+  | "pending_manager"
+  | "approved"
+  | "cancelled"
+  | "expired"
+  | "superseded";
+
+export interface SwapUserBrief {
+  id: string;
+  name: string;
+}
+
+export interface SwapShiftBrief {
+  shift_id: string;
+  location_id: string;
+  location_name: string;
+  location_timezone: string;
+  starts_at: string;
+  ends_at: string;
+  required_skill: string;
+}
+
+export interface SwapRequestResponse {
+  id: string;
+  type: SwapType;
+  status: SwapStatus;
+  expires_at: string | null;
+  created_at: string;
+  requester: SwapUserBrief;
+  target: SwapUserBrief | null;
+  shift: SwapShiftBrief;
+  can_accept: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_claim: boolean;
+  claim_block_reason: string | null;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  payload: Record<string, string> | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPreferences {
+  in_app: boolean;
+  email_sim: boolean;
+}
+
+export async function fetchSwapRequests(): Promise<SwapRequestResponse[]> {
+  const { data } = await api.get<SwapRequestResponse[]>("/swap-requests");
+  return data;
+}
+
+export async function fetchOpenShifts(): Promise<SwapRequestResponse[]> {
+  const { data } = await api.get<SwapRequestResponse[]>("/open-shifts");
+  return data;
+}
+
+export async function createSwapRequest(payload: {
+  assignment_id: string;
+  type: SwapType;
+  target_user_id?: string;
+}): Promise<SwapRequestResponse> {
+  const { data } = await api.post<SwapRequestResponse>("/swap-requests", payload);
+  return data;
+}
+
+export async function acceptSwap(swapId: string): Promise<SwapRequestResponse> {
+  const { data } = await api.post<SwapRequestResponse>(`/swap-requests/${swapId}/accept`);
+  return data;
+}
+
+export async function approveSwap(swapId: string): Promise<SwapRequestResponse> {
+  const { data } = await api.post<SwapRequestResponse>(`/swap-requests/${swapId}/approve`);
+  return data;
+}
+
+export async function cancelSwap(swapId: string): Promise<SwapRequestResponse> {
+  const { data } = await api.post<SwapRequestResponse>(`/swap-requests/${swapId}/cancel`);
+  return data;
+}
+
+export async function claimOpenShift(swapId: string): Promise<{ assignment_id: string; shift_id: string }> {
+  const { data } = await api.post<{ assignment_id: string; shift_id: string }>(
+    `/swap-requests/${swapId}/claim`,
+  );
+  return data;
+}
+
+export async function fetchNotifications(): Promise<NotificationItem[]> {
+  const { data } = await api.get<NotificationItem[]>("/me/notifications");
+  return data;
+}
+
+export async function markNotificationRead(id: string): Promise<NotificationItem> {
+  const { data } = await api.post<NotificationItem>(`/me/notifications/${id}/read`);
+  return data;
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  const { data } = await api.get<NotificationPreferences>("/me/notification-preferences");
+  return data;
+}
+
+export async function updateNotificationPreferences(
+  payload: Partial<NotificationPreferences>,
+): Promise<NotificationPreferences> {
+  const { data } = await api.patch<NotificationPreferences>("/me/notification-preferences", payload);
+  return data;
+}
+
+export const SWAP_STATUS_LABELS: Record<SwapStatus, string> = {
+  pending_counterparty: "Awaiting peer",
+  pending_manager: "Awaiting manager",
+  approved: "Approved / open",
+  cancelled: "Cancelled",
+  expired: "Expired",
+  superseded: "Superseded",
+};

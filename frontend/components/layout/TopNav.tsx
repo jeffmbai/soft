@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/ui/Icon";
 import LocationTabs from "@/components/layout/LocationTabs";
+import NotificationsMenu from "@/components/layout/NotificationsMenu";
 import UserMenu from "@/components/layout/UserMenu";
 import { useScheduleUiStore } from "@/stores/scheduleUiStore";
 import { cn } from "@/lib/cn";
@@ -128,14 +129,7 @@ export default function TopNav({
             )}
 
             <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-full bg-surface-container-low border border-outline-variant/60">
-              <button
-                type="button"
-                title="Notifications"
-                className="relative p-2 rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-container-lowest transition-colors"
-              >
-                <Icon name="notifications" size={20} />
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-error ring-2 ring-surface-container-low" />
-              </button>
+              <NotificationsMenu />
             </div>
 
             {canAddShift && (

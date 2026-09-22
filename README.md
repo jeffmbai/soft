@@ -2,7 +2,7 @@
 
 Multi-location shift scheduling platform for the Priority Soft assessment.
 
-**Current phase:** Phase 2 complete (scheduling core). Phase 3 (swaps, notifications) is next.
+**Current phase:** Phase 3 complete (swaps, notifications, audit history).
 
 ## Stack
 
@@ -20,7 +20,7 @@ docker compose up --build
 - Backend API: http://localhost:8000
 - API docs: http://localhost:8000/docs
 
-On first startup, migrations run automatically and seed data is loaded (including demo shifts).
+On first startup, migrations run automatically and seed data is loaded (shifts, swap/drop demos, notifications).
 
 ## Demo Credentials
 
@@ -33,16 +33,18 @@ All accounts use password: **`password123`**
 | Manager (Eastern) | manager.east@coastaleats.com | Boardwalk Bistro + Lighthouse Cafe |
 | Staff | sam@coastaleats.com | Example staff account |
 
-## Phase 2 Features
+## Features
 
 | Area | Route | Who |
 | --- | --- | --- |
 | Operations dashboard | `/dashboard` | Admin, Manager |
 | Weekly schedule | `/schedule` | Admin, Manager |
+| Open shifts / swaps | `/open-shifts` | Admin, Manager, Staff |
 | Staff roster | `/users` | Admin |
 | Locations + managers | `/locations` | Admin |
 | My schedule | `/my-schedule` | Staff |
 | Availability | `/availability` | Staff |
+| Settings (notifications) | `/settings` | All |
 
 ## Local Development (without Docker)
 
@@ -57,6 +59,7 @@ export DATABASE_URL=postgresql+asyncpg://shiftsync:shiftsync@localhost:5432/shif
 alembic upgrade head
 python -m scripts.seed
 python -m scripts.seed scheduling
+python -m scripts.seed swaps
 uvicorn app.main:app --reload
 ```
 
@@ -75,8 +78,8 @@ soft/
 ├── backend/
 │   ├── app/
 │   │   ├── models/
-│   │   ├── routers/       # auth, locations, staff, scheduling, availability
-│   │   ├── services/      # constraints, access, audit
+│   │   ├── routers/       # auth, locations, staff, scheduling, swaps, notifications
+│   │   ├── services/      # constraints, access, audit, swaps, notifications
 │   │   └── schemas/
 │   ├── alembic/
 │   └── scripts/seed.py
@@ -88,6 +91,7 @@ soft/
 ├── docs/
 │   ├── phase-1-decisions.md
 │   ├── phase-2-decisions.md
+│   ├── phase-3-decisions.md
 │   └── role-permissions.md
 └── docker-compose.yml
 ```
@@ -96,11 +100,11 @@ soft/
 
 - [Phase 1 decisions](docs/phase-1-decisions.md)
 - [Phase 2 decisions](docs/phase-2-decisions.md)
+- [Phase 3 decisions](docs/phase-3-decisions.md)
 - [Role permissions](docs/role-permissions.md)
 
 ## Known Limitations
 
 - Email is simulated (not real SMTP)
-- Swaps/notifications not yet implemented (Phase 3)
 - No WebSocket live updates yet (Phase 4)
 - Clock-in / on-duty uses shift time windows only

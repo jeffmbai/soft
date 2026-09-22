@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Drawer, { DrawerCloseButton } from "@/components/ui/Drawer";
 import Button from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   createShift,
   SKILL_LABELS,
@@ -78,11 +79,13 @@ export default function AddShiftDrawer({
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["schedule"] });
+      void qc.invalidateQueries({ queryKey: ["schedule"] });
+      toastSuccess("Shift created");
       onCreated();
       onClose();
     },
     onError: (err: unknown) => {
+      toastApiError(err, "Could not create shift");
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(typeof msg === "string" ? msg : err instanceof Error ? err.message : "Failed to create shift");
     },
