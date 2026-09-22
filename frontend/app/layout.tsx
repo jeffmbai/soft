@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ShiftSync — Multi-Location Scheduling",
+  title: "ShiftSync",
   description: "Multi-location staff scheduling platform",
 };
 

@@ -1,222 +1,304 @@
 "use client";
 
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import AddShiftDrawer from "@/components/pages/AddShiftDrawer";
+import AssignShiftModal from "@/components/pages/AssignShiftModal";
 import {
   AlertBanner,
-  Avatar,
   Badge,
   Button,
   Card,
   Icon,
-  SegmentedControl,
+  PageHeader,
 } from "@/components/ui";
+import Loading from "@/components/Loading";
+import { useScheduleUiStore } from "@/stores/scheduleUiStore";
+import {
+  addWeeks,
+  fetchLocations,
+  fetchSchedule,
+  formatShiftRange,
+  mondayOfWeek,
+  publishWeek,
+  SKILL_LABELS,
+  type ShiftResponse,
+  type Skill,
+} from "@/lib/api";
+import { addDays, isDatePast, isShiftPast } from "@/lib/schedule-utils";
 import { cn } from "@/lib/cn";
 
-const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const dates = ["Oct 20", "Oct 21", "Oct 22", "Oct 23", "Oct 24", "Oct 25", "Oct 26"];
-const todayIndex = 3;
+const SKILLS: Skill[] = ["bartender", "line_cook", "server", "host"];
 
-type ShiftCard = {
-  initials: string;
-  name: string;
-  time: string;
-  station: string;
-  conflict?: boolean;
-  empty?: boolean;
-};
+function weekDayHeaders(weekStart: string): { short: string; date: string; iso: string; past: boolean }[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const iso = addDays(weekStart, i);
+    const d = new Date(iso + "T12:00:00");
+    return {
+      iso,
+      short: d.toLocaleDateString("en-US", { weekday: "short" }),
+      date: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      past: isDatePast(iso),
+    };
+  });
+}
 
-const bartenderRow: ShiftCard[] = [
-  { initials: "SA", name: "Staff A", time: "16:00 - 00:00", station: "Main Bar" },
-  { initials: "SB", name: "Staff B", time: "16:30 - 00:30", station: "Lounge" },
-  { initials: "SC", name: "Staff C", time: "18:00 - 23:00", station: "Unit Alpha", conflict: true },
-  { initials: "SA", name: "Staff A", time: "16:00 - 00:00", station: "Main Bar" },
-  { initials: "SB", name: "Staff B", time: "17:00 - 01:00", station: "Lounge" },
-  { initials: "SB", name: "Staff B", time: "17:00 - 01:00", station: "Lead" },
-  { empty: true, initials: "", name: "", time: "", station: "" },
-];
-
-function ShiftCell({ shift }: { shift: ShiftCard }) {
-  if (shift.empty) {
-    return (
-      <div className="p-2 rounded border border-dashed border-outline-variant bg-surface-container-low flex flex-col items-center justify-center text-center py-4 hover:border-secondary transition-colors cursor-pointer">
-        <Icon name="add" size={18} className="text-outline" />
-        <span className="font-label-md text-[11px] text-on-surface-variant">Slot Available</span>
-      </div>
-    );
-  }
-
-  if (shift.conflict) {
-    return (
-      <div className="p-2 rounded bg-error-container border-2 border-error border-l-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Avatar initials={shift.initials} size="xs" variant="error" />
-            <span className="font-label-md text-label-md font-bold text-error">{shift.name}</span>
-          </div>
-          <Icon name="crisis_alert" size={16} className="text-error animate-pulse" />
-        </div>
-        <div className="font-data-mono text-data-mono text-error font-bold text-[11px] mt-1">{shift.time}</div>
-        <Badge variant="error" mono className="mt-1 text-[9px] uppercase font-extrabold rounded">
-          DUAL BOOK: Unit Alpha + Unit Beta
-        </Badge>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-2 rounded bg-surface border border-outline-variant border-l-[3px] border-l-secondary shadow-sm hover:border-secondary transition-all">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Avatar initials={shift.initials} size="xs" variant="secondary" className="rounded-full bg-secondary-fixed text-on-secondary-fixed" />
-          <span className="font-label-md text-label-md font-semibold text-primary">{shift.name}</span>
-        </div>
-        <Icon name="check_circle" size={15} className="text-secondary" />
-      </div>
-      <div className="font-data-mono text-data-mono text-on-surface-variant text-[11px] mt-1">{shift.time}</div>
-      <div className="text-[10px] text-outline">{shift.station}</div>
-    </div>
-  );
+function shiftDayIndex(startsAt: string, weekStart: string): number {
+  const d = new Date(startsAt);
+  const ws = new Date(weekStart + "T12:00:00");
+  return Math.floor((d.getTime() - ws.getTime()) / 86400000);
 }
 
 export default function ScheduleView() {
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const qc = useQueryClient();
+  const addShiftOpen = useScheduleUiStore((s) => s.addShiftOpen);
+  const prefill = useScheduleUiStore((s) => s.prefill);
+  const openAddShift = useScheduleUiStore((s) => s.openAddShift);
+  const closeAddShift = useScheduleUiStore((s) => s.closeAddShift);
+  const requestPublish = useScheduleUiStore((s) => s.requestPublish);
+  const clearPublishRequest = useScheduleUiStore((s) => s.clearPublishRequest);
+
+  const [weekStart, setWeekStart] = useState(mondayOfWeek());
+  const [locationId, setLocationId] = useState<string>("");
+  const [assignShiftTarget, setAssignShiftTarget] = useState<ShiftResponse | null>(null);
+
+  const dayHeaders = useMemo(() => weekDayHeaders(weekStart), [weekStart]);
+
+  const { data: locations, isLoading: locLoading } = useQuery({
+    queryKey: ["locations"],
+    queryFn: fetchLocations,
+  });
+
+  const activeLocationId = locationId || locations?.[0]?.id || "";
+  const activeLocation = locations?.find((l) => l.id === activeLocationId);
+
+  const { data: schedule, isLoading: schedLoading } = useQuery({
+    queryKey: ["schedule", activeLocationId, weekStart],
+    queryFn: () => fetchSchedule(activeLocationId, weekStart),
+    enabled: !!activeLocationId,
+  });
+
+  const publish = useMutation({
+    mutationFn: () => publishWeek(activeLocationId, weekStart),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] }),
+  });
+
+  useEffect(() => {
+    if (!requestPublish || !activeLocationId) return;
+    publish.mutate();
+    clearPublishRequest();
+  }, [requestPublish, activeLocationId, clearPublishRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shiftsBySkillDay = useMemo(() => {
+    const map: Record<string, Record<number, ShiftResponse[]>> = {};
+    for (const skill of SKILLS) map[skill] = {};
+    for (const shift of schedule?.shifts ?? []) {
+      const day = shiftDayIndex(shift.starts_at, weekStart);
+      if (day < 0 || day > 6) continue;
+      if (!map[shift.required_skill][day]) map[shift.required_skill][day] = [];
+      map[shift.required_skill][day].push(shift);
+    }
+    return map;
+  }, [schedule, weekStart]);
+
+  const totalShifts = schedule?.shifts.length ?? 0;
+  const openSlots = (schedule?.shifts ?? []).reduce(
+    (acc, s) => acc + Math.max(0, s.headcount - s.assignments.length),
+    0,
+  );
+
+  const invalidateSchedule = () =>
+    qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] });
+
+  if (locLoading) return <Loading variant="inline" message="Loading locations…" />;
 
   return (
     <div className="flex flex-col gap-space-lg pb-24">
-      <Card className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center bg-surface-container rounded border border-outline-variant p-0.5">
-            <button type="button" className="p-1.5 hover:bg-surface-container-lowest rounded text-primary">
-              <Icon name="chevron_left" size={20} />
-            </button>
-            <button type="button" className="p-1.5 hover:bg-surface-container-lowest rounded text-primary">
-              <Icon name="chevron_right" size={20} />
-            </button>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <h1 className="font-headline-lg text-headline-lg font-bold text-primary tracking-tight">
-              Week of Oct 20 – 26, 2024
-            </h1>
-            <Badge variant="default" mono>Q4 • Dinner Rotation</Badge>
-          </div>
-          <Button variant="outline" size="sm">Today</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <PageHeader title={`Week of ${weekStart}`} description={activeLocation?.name} />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setWeekStart(addWeeks(weekStart, -1))}>Prev</Button>
+          <Button variant="outline" size="sm" onClick={() => setWeekStart(mondayOfWeek())}>Today</Button>
+          <Button variant="outline" size="sm" onClick={() => setWeekStart(addWeeks(weekStart, 1))}>Next</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={publish.isPending || !activeLocationId}
+            onClick={() => publish.mutate()}
+          >
+            {schedule?.is_published ? "Re-publish" : "Publish week"}
+          </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <SegmentedControl
-            label="Role:"
-            options={[
-              { id: "all", label: "All" },
-              { id: "a", label: "Role A" },
-              { id: "b", label: "Role B" },
-              { id: "c", label: "Role C" },
-            ]}
-            value={roleFilter}
-            onChange={setRoleFilter}
-          />
-          <SegmentedControl
-            label="Status:"
-            options={[
-              { id: "all", label: "All" },
-              { id: "conflict", label: "Conflict (1)", dot: true },
-            ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        </div>
-      </Card>
+      </div>
 
-      <AlertBanner
-        variant="error"
-        icon="warning"
-        title="DOUBLE-BOOKING: Staff C scheduled at Unit Alpha and Unit Beta (18:00 - 23:00)"
-        description="Staff cannot be assigned to two locations at the same time. Auto-replacement recommended."
-        actions={[
-          { label: "Resolve Conflict", variant: "outline" },
-          { label: "Auto-Rebalance", variant: "danger" },
-        ]}
-      />
-
-      <Card padding={false} className="overflow-x-auto">
-        <div className="grid grid-cols-[200px_repeat(7,1fr)] min-w-[900px] border-b border-outline-variant bg-surface-container-low">
-          <div className="p-space-md border-r border-outline-variant flex flex-col justify-end">
-            <span className="font-badge-mono text-badge-mono text-outline uppercase tracking-wider">Station & Quota</span>
-            <span className="font-title-sm text-title-sm text-primary font-bold">Role Headcount</span>
-          </div>
-          {days.map((day, i) => (
-            <div
-              key={day}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex gap-2 flex-wrap items-center">
+          {locations?.map((loc) => (
+            <button
+              key={loc.id}
+              type="button"
+              onClick={() => setLocationId(loc.id)}
               className={cn(
-                "p-space-sm text-center border-r border-outline-variant last:border-r-0",
-                i === todayIndex && "bg-secondary-fixed/20",
+                "px-3 py-1.5 rounded-xl text-sm border transition-colors",
+                loc.id === activeLocationId
+                  ? "bg-secondary text-on-secondary border-secondary"
+                  : "border-outline-variant hover:border-secondary/50",
               )}
             >
-              <span className={cn("font-label-md text-label-md uppercase block", i === todayIndex ? "text-secondary font-bold" : "text-outline")}>
-                {i === todayIndex ? `${day} (Today)` : day}
-              </span>
-              <span className={cn("font-headline-md text-headline-md font-bold", i === todayIndex ? "text-secondary font-extrabold" : "text-primary")}>
-                {dates[i]}
-              </span>
-            </div>
+              {loc.name}
+            </button>
           ))}
+          {schedule?.is_published ? (
+            <Badge variant="live">Published</Badge>
+          ) : (
+            <Badge variant="warning">Draft</Badge>
+          )}
+          {!schedLoading && totalShifts > 0 && (
+            <span className="text-xs text-on-surface-variant font-data-mono">
+              {totalShifts} shifts · {openSlots} open slots
+            </span>
+          )}
         </div>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!activeLocationId}
+          onClick={() => openAddShift()}
+          className="shrink-0"
+        >
+          <Icon name="add" size={18} />
+          Add shift
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-[200px_repeat(7,1fr)] min-w-[900px] border-b border-outline-variant divide-x divide-outline-variant min-h-[140px]">
-          <div className="p-space-md bg-surface-container-lowest flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
-                <span className="font-title-sm text-title-sm font-bold text-primary">Role A</span>
-              </div>
-              <p className="font-body-sm text-body-sm text-on-surface-variant text-[12px] mt-1">
-                Headcount: <span className="font-semibold text-primary">2 per shift</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 font-badge-mono text-badge-mono text-outline">
-              <Icon name="local_bar" size={14} />
-              <span>Front Station</span>
-            </div>
-          </div>
-          {bartenderRow.map((shift, i) => (
-            <div key={i} className={cn("p-2 flex flex-col gap-2", i === todayIndex && "bg-secondary-fixed/10")}>
-              <ShiftCell shift={shift} />
-            </div>
-          ))}
-        </div>
+      {!schedLoading && totalShifts === 0 && (
+        <AlertBanner
+          variant="info"
+          icon="event_available"
+          title="No shifts this week"
+          description="Create your first shift to start building the schedule."
+          actions={[{ label: "Add shift", onClick: () => openAddShift(), variant: "primary" }]}
+        />
+      )}
 
-        <div className="grid grid-cols-[200px_repeat(7,1fr)] min-w-[900px] border-b border-outline-variant divide-x divide-outline-variant min-h-[120px]">
-          <div className="p-space-md bg-surface-container-lowest flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-on-tertiary-container" />
-                <span className="font-title-sm text-title-sm font-bold text-primary">Role B</span>
+      {schedLoading ? (
+        <Loading variant="inline" message="Loading schedule…" />
+      ) : (
+        <Card padding={false} className="overflow-x-auto">
+          <div className="grid grid-cols-[140px_repeat(7,1fr)] min-w-[980px] border-b border-outline-variant bg-surface-container-low">
+            <div className="p-3 border-r border-outline-variant font-semibold text-sm">Role</div>
+            {dayHeaders.map((d) => (
+              <div
+                key={d.iso}
+                className={cn(
+                  "p-2 text-center border-r border-outline-variant last:border-r-0",
+                  d.past && "opacity-60",
+                )}
+              >
+                <div className="text-sm font-semibold">{d.short}</div>
+                <div className="text-[11px] text-on-surface-variant font-data-mono">{d.date}</div>
               </div>
-              <p className="font-body-sm text-body-sm text-on-surface-variant text-[12px] mt-1">
-                Headcount: <span className="font-semibold text-primary">4 needed</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-1.5 font-badge-mono text-badge-mono text-outline">
-              <Icon name="skillet" size={14} />
-              <span>Back Station</span>
-            </div>
+            ))}
           </div>
-          {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="p-2 flex flex-col gap-1.5">
-              {i < 5 ? (
-                <div className="p-2 rounded bg-surface border border-outline-variant border-l-[3px] border-l-tertiary-fixed-dim shadow-sm">
-                  <div className="flex items-center gap-1">
-                    <Avatar initials="SD" size="xs" className="bg-primary-fixed text-primary rounded-full" />
-                    <span className="font-label-md text-label-md font-semibold text-primary text-[12px]">Staff D</span>
+          {SKILLS.map((skill) => (
+            <div
+              key={skill}
+              className="grid grid-cols-[140px_repeat(7,1fr)] min-w-[980px] border-b border-outline-variant divide-x divide-outline-variant"
+            >
+              <div className="p-3 bg-surface-container-lowest text-sm font-semibold flex items-start">
+                {SKILL_LABELS[skill]}
+              </div>
+              {dayHeaders.map((dayHeader, day) => {
+                const cellShifts = shiftsBySkillDay[skill][day] ?? [];
+                const isEmpty = cellShifts.length === 0;
+                const dayPast = dayHeader.past;
+                return (
+                  <div
+                    key={day}
+                    role={!dayPast ? "button" : undefined}
+                    tabIndex={!dayPast ? 0 : undefined}
+                    onClick={() => !dayPast && openAddShift({ dayOffset: day, skill })}
+                    onKeyDown={(e) => {
+                      if (!dayPast && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        openAddShift({ dayOffset: day, skill });
+                      }
+                    }}
+                    className={cn(
+                      "p-2 flex flex-col gap-1.5 min-h-[110px] transition-colors",
+                      (isEmpty || dayPast) && "bg-surface-container-low/40",
+                      dayPast && "opacity-70",
+                      !dayPast && "cursor-pointer hover:bg-secondary/5",
+                      isEmpty && !dayPast && "border border-dashed border-transparent hover:border-secondary/40",
+                    )}
+                  >
+                    {cellShifts.map((shift) => {
+                      const filled = shift.assignments.length;
+                      const total = shift.headcount;
+                      const full = filled >= total;
+                      const past = isShiftPast(shift.starts_at);
+                      const canAssign = !past && !full;
+                      return (
+                        <button
+                          key={shift.id}
+                          type="button"
+                          disabled={!canAssign}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (canAssign) setAssignShiftTarget(shift);
+                          }}
+                          className={cn(
+                            "text-left p-2 rounded-xl border text-xs transition-colors",
+                            past && "opacity-60 cursor-not-allowed border-outline-variant/50 bg-surface-container-low",
+                            !past && full && "border-secondary/30 bg-secondary/5",
+                            !past && !full && "border-outline-variant bg-surface hover:border-secondary cursor-pointer",
+                          )}
+                        >
+                          <div className="font-data-mono">
+                            {activeLocation &&
+                              formatShiftRange(shift.starts_at, shift.ends_at, activeLocation.timezone)}
+                          </div>
+                          <div className={cn("mt-1 font-medium", past ? "text-outline" : full ? "text-secondary" : "text-warning")}>
+                            {past ? "Past" : `${filled}/${total} filled`}
+                          </div>
+                          {shift.assignments.map((a) => (
+                            <div key={a.id} className="text-primary font-medium truncate">{a.user_name}</div>
+                          ))}
+                        </button>
+                      );
+                    })}
+                    {isEmpty && !dayPast && (
+                      <div className="flex-1 flex items-center justify-center text-xs text-on-surface-variant font-medium min-h-[72px]">
+                        Click to add shift
+                      </div>
+                    )}
                   </div>
-                  <div className="font-data-mono text-data-mono text-on-surface-variant text-[11px] mt-1">14:00 - 22:00</div>
-                </div>
-              ) : (
-                <ShiftCell shift={{ empty: true, initials: "", name: "", time: "", station: "" }} />
-              )}
+                );
+              })}
             </div>
           ))}
-        </div>
-      </Card>
+        </Card>
+      )}
+
+      <AddShiftDrawer
+        open={addShiftOpen}
+        onClose={closeAddShift}
+        location={activeLocation}
+        weekStart={weekStart}
+        prefillDayOffset={prefill?.dayOffset ?? 0}
+        prefillSkill={prefill?.skill ?? "server"}
+        onCreated={invalidateSchedule}
+      />
+
+      {assignShiftTarget && activeLocation && (
+        <AssignShiftModal
+          shift={assignShiftTarget}
+          timezone={activeLocation.timezone}
+          locationId={activeLocationId}
+          onClose={() => setAssignShiftTarget(null)}
+          onAssigned={invalidateSchedule}
+        />
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ from app.models.location import Location
 from app.models.notification import NotificationPreference
 from app.models.staff import AvailabilityWindow, StaffLocationCert, StaffProfile, StaffSkill
 from app.models.user import ManagerLocation, User
+from app.models.shift import ScheduleWeek, Shift, ShiftAssignment
 from app.security import hash_password
 
 DEMO_PASSWORD = "password123"
@@ -118,5 +119,87 @@ async def seed() -> None:
         print("Staff example: sam@coastaleats.com")
 
 
+async def seed_scheduling() -> None:
+    """Add demo shifts if none exist."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.models.enums import ShiftStatus, Skill
+    from app.models.shift import ScheduleWeek, Shift, ShiftAssignment
+
+    async with async_session() as db:
+        existing = await db.execute(select(Shift).limit(1))
+        if existing.scalar_one_or_none():
+            print("Scheduling data already seeded, skipping.")
+            return
+
+        loc_result = await db.execute(select(Location))
+        locations = {l.name: l for l in loc_result.scalars().all()}
+        pier = locations["Pier House"]
+        harbor = locations["Harbor Grill"]
+
+        staff_result = await db.execute(select(User).where(User.role == UserRole.staff))
+        staff = {u.email: u for u in staff_result.scalars().all()}
+
+        today = datetime.now(timezone.utc).date()
+        week_start = today - timedelta(days=today.weekday())
+
+        def shift_at(loc, day_offset, hour, duration, skill, headcount=1):
+            d = week_start + timedelta(days=day_offset)
+            start = datetime(d.year, d.month, d.day, hour, 0, tzinfo=timezone.utc)
+            end = start + timedelta(hours=duration)
+            return Shift(
+                location_id=loc.id,
+                starts_at=start,
+                ends_at=end,
+                required_skill=skill,
+                headcount=headcount,
+                status=ShiftStatus.draft,
+            )
+
+        shifts = [
+            shift_at(pier, 0, 14, 8, Skill.server, 2),
+            shift_at(pier, 1, 14, 8, Skill.bartender, 1),
+            shift_at(pier, 2, 17, 6, Skill.bartender, 1),
+            shift_at(pier, 4, 17, 7, Skill.server, 2),
+            shift_at(pier, 5, 17, 8, Skill.bartender, 1),
+            shift_at(harbor, 0, 15, 8, Skill.line_cook, 1),
+            shift_at(harbor, 3, 14, 10, Skill.line_cook, 1),
+        ]
+        db.add_all(shifts)
+        await db.flush()
+
+        s0, s1, s2, s3, s4, s5, s6 = shifts
+
+        db.add_all([
+            ShiftAssignment(shift_id=s0.id, user_id=staff["sam@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s0.id, user_id=staff["riley@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s1.id, user_id=staff["maria@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s2.id, user_id=staff["sarah@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s4.id, user_id=staff["maria@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s5.id, user_id=staff["casey@coastaleats.com"].id),
+            ShiftAssignment(shift_id=s6.id, user_id=staff["casey@coastaleats.com"].id),
+        ])
+
+        # Publish pier house week partially
+        for s in [s0, s1, s2, s3]:
+            s.status = ShiftStatus.published
+        db.add(
+            ScheduleWeek(
+                location_id=pier.id,
+                week_start=week_start,
+                published_at=datetime.now(timezone.utc),
+            )
+        )
+
+        await db.commit()
+        print("Scheduling seed complete!")
+
+
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "scheduling":
+        asyncio.run(seed_scheduling())
+    else:
+        asyncio.run(seed())

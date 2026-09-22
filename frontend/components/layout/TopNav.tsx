@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/ui/Icon";
 import LocationTabs from "@/components/layout/LocationTabs";
 import UserMenu from "@/components/layout/UserMenu";
+import { useScheduleUiStore } from "@/stores/scheduleUiStore";
 import { cn } from "@/lib/cn";
 
 type TopNavProps = {
@@ -22,7 +24,37 @@ const pageTitles: Record<string, string> = {
   "/locations": "Locations",
   "/my-schedule": "My Schedule",
   "/availability": "Availability",
+  "/profile": "Profile",
+  "/settings": "Settings",
 };
+
+function NavIconLink({
+  href,
+  icon,
+  label,
+  active,
+}: {
+  href: string;
+  icon: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      title={label}
+      className={cn(
+        "flex items-center gap-1.5 h-9 px-3 rounded-xl font-label-md text-label-md font-medium transition-colors",
+        active
+          ? "bg-secondary/15 text-secondary"
+          : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low",
+      )}
+    >
+      <Icon name={icon} size={18} />
+      <span className="hidden lg:inline">{label}</span>
+    </Link>
+  );
+}
 
 function pageTitle(pathname: string) {
   return pageTitles[pathname] ?? "ShiftSync";
@@ -34,10 +66,12 @@ export default function TopNav({
   onLogout,
 }: TopNavProps) {
   const pathname = usePathname();
+  const openAddShift = useScheduleUiStore((s) => s.openAddShift);
   const title = pageTitle(pathname);
   const isSchedule = pathname.startsWith("/schedule");
   const isRoster = pathname.startsWith("/users");
   const minimalNav = isRoster;
+  const canAddShift = isSchedule && (userRole === "admin" || userRole === "manager");
 
   return (
     <header className="sticky top-0 z-40 h-[60px] flex items-center gap-4 px-5 bg-surface-container-lowest/90 backdrop-blur-md border-b border-outline-variant/70 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
@@ -104,17 +138,24 @@ export default function TopNav({
               </button>
             </div>
 
-            <button
-              type="button"
-              className="hidden sm:flex items-center gap-1.5 h-9 px-4 rounded-full font-label-md text-label-md font-semibold transition-all active:scale-[0.98] shadow-sm ml-1 bg-secondary text-on-secondary hover:bg-on-secondary-container"
-            >
-              <Icon name="add" size={18} />
-              <span className="hidden lg:inline">Add Shift</span>
-            </button>
+            {canAddShift && (
+              <button
+                type="button"
+                onClick={() => openAddShift()}
+                className="hidden sm:flex items-center gap-1.5 h-9 px-4 rounded-full font-label-md text-label-md font-semibold transition-all active:scale-[0.98] shadow-sm ml-1 bg-secondary text-on-secondary hover:bg-on-secondary-container"
+              >
+                <Icon name="add" size={18} />
+                <span className="hidden lg:inline">Add Shift</span>
+              </button>
+            )}
 
-            <div className="hidden sm:block h-8 w-px bg-outline-variant/60 mx-1" />
+           
           </>
         )}
+
+        
+
+      
 
         <UserMenu name={userName} role={userRole} onLogout={onLogout} />
       </div>

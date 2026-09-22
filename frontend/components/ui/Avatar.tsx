@@ -14,7 +14,7 @@ const sizes: Record<AvatarSize, string> = {
 const variants: Record<AvatarVariant, string> = {
   default: "bg-surface-container-high text-primary",
   secondary: "bg-secondary text-on-secondary shadow-sm",
-  gradient: "bg-gradient-to-br from-secondary to-on-secondary-container text-on-secondary shadow-lg ring-2 ring-white/20",
+  gradient: "bg-secondary text-on-secondary shadow-sm ring-2 ring-secondary/20",
   error: "bg-error-container text-on-error-container border border-error",
 };
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, locations, staff
+from app.routers import auth, availability, locations, scheduling, staff
 
 app = FastAPI(title="ShiftSync API", version="0.1.0")
 
@@ -17,6 +17,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(staff.router, prefix="/api")
+app.include_router(scheduling.router, prefix="/api")
+app.include_router(availability.router, prefix="/api")
 
 
 @app.get("/health")

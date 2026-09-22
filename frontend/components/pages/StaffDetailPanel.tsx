@@ -42,19 +42,18 @@ export default function StaffDetailPanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const header = (
-    <div className="relative shrink-0 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary-container via-primary-container to-secondary/30" />
-      <div className="relative px-5 pt-5 pb-4">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <Avatar initials={staff.initials} size="xl" variant="gradient" />
-            <div>
-              <h2 className="font-headline-md text-headline-md font-bold text-inverse-on-surface">{staff.name}</h2>
-              <p className="font-data-mono text-data-mono text-on-primary-container text-[11px] mt-0.5">{staff.email}</p>
-            </div>
+    <div className="shrink-0 px-5 pt-5 pb-4 border-b border-outline-variant bg-surface-container-low">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Avatar initials={staff.initials} size="xl" variant="secondary" />
+          <div>
+            <h2 className="font-headline-md text-headline-md font-bold text-primary">{staff.name}</h2>
+            <p className="font-data-mono text-data-mono text-on-surface-variant text-[11px] mt-0.5">{staff.email}</p>
           </div>
-          <DrawerCloseButton onClose={onClose} />
         </div>
+        <DrawerCloseButton onClose={onClose} />
+      </div>
+      <div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="live">{staff.role}</Badge>
           {staff.otRisk && (
@@ -70,9 +69,9 @@ export default function StaffDetailPanel({
             { label: "Goal", value: staff.goal, warn: false },
             { label: "Equity", value: staff.equity, warn: staff.otRisk },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl bg-white/8 ring-1 ring-white/10 px-2.5 py-2 text-center">
-              <p className="font-data-mono text-[10px] text-on-primary-container uppercase">{item.label}</p>
-              <p className={cn("font-headline-md text-headline-md font-bold mt-0.5", item.warn ? "text-error" : "text-inverse-on-surface")}>
+            <div key={item.label} className="rounded-xl bg-surface-container-lowest ring-1 ring-outline-variant/60 px-2.5 py-2 text-center">
+              <p className="font-data-mono text-[10px] text-outline uppercase">{item.label}</p>
+              <p className={cn("font-headline-md text-headline-md font-bold mt-0.5", item.warn ? "text-error" : "text-primary")}>
                 {item.value}
               </p>
             </div>

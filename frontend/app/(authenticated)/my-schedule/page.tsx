@@ -1,5 +1,5 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+import MyScheduleView from "@/components/pages/MyScheduleView";
 
 export default function Page() {
-  return <PlaceholderPage title="My Schedule" description="Staff schedule view — Phase 2" />;
+  return <MyScheduleView />;
 }
