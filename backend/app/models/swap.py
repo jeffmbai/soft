@@ -14,8 +14,9 @@ class SwapRequest(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     type: Mapped[SwapType] = mapped_column(Enum(SwapType, name="swap_type"), nullable=False)
-    requester_assignment_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("shift_assignments.id"), nullable=False
+    shift_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("shifts.id"), nullable=False)
+    requester_assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("shift_assignments.id"), nullable=True
     )
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     counterpart_assignment_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -26,4 +27,6 @@ class SwapRequest(Base):
     manager_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    requester_assignment: Mapped["ShiftAssignment"] = relationship(foreign_keys=[requester_assignment_id])
+    shift: Mapped["Shift"] = relationship()
+    target_user: Mapped["User | None"] = relationship(foreign_keys=[target_user_id])
+    requester_assignment: Mapped["ShiftAssignment | None"] = relationship(foreign_keys=[requester_assignment_id])

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.enums import ShiftStatus, UserRole
 from app.models.location import Location
+from app.models.audit import AuditLog
 from app.models.shift import ScheduleWeek, Shift, ShiftAssignment
 from app.models.user import User
 from app.schemas.scheduling import (
@@ -18,6 +19,7 @@ from app.schemas.scheduling import (
     AssignRequest,
     AssignResultResponse,
     AssignmentBrief,
+    AuditLogResponse,
     PublishWeekResponse,
     ScheduleWeekResponse,
     ShiftCreateRequest,
@@ -30,6 +32,7 @@ from app.schemas.scheduling import (
 from app.services.access import get_accessible_location_ids, require_location_access
 from app.services.audit import log_change
 from app.services.constraints import suggest_alternatives, validate_assignment
+from app.services.swaps import cancel_swaps_for_shift
 
 router = APIRouter(tags=["scheduling"])
 
@@ -216,6 +219,7 @@ async def update_shift(
         shift.headcount = body.headcount
     shift.version += 1
 
+    await cancel_swaps_for_shift(db, shift.id, user.id)
     await log_change(db, entity_type="shift", entity_id=shift.id, actor_id=user.id, before=before, after={"version": shift.version})
     await db.commit()
     shift = await _load_shift(db, shift_id)
@@ -236,6 +240,7 @@ async def delete_shift(
     await require_location_access(shift.location_id, user, db)
     if shift.status == ShiftStatus.published:
         raise HTTPException(status_code=400, detail="Cannot delete published shift; unpublish week first")
+    await cancel_swaps_for_shift(db, shift_id, user.id)
     await db.execute(delete(ShiftAssignment).where(ShiftAssignment.shift_id == shift_id))
     await db.delete(shift)
     await db.commit()
@@ -448,3 +453,34 @@ async def unpublish_week(
         published_at=datetime.now(timezone.utc),
         shifts_published=0,
     )
+
+
+@router.get("/shifts/{shift_id}/history", response_model=list[AuditLogResponse])
+async def shift_history(
+    shift_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.swap import SwapRequest
+
+    shift = await _load_shift(db, shift_id)
+    await require_location_access(shift.location_id, user, db)
+
+    assignment_ids = [a.id for a in shift.assignments]
+    swap_ids_result = await db.execute(select(SwapRequest.id).where(SwapRequest.shift_id == shift_id))
+    swap_ids = [row[0] for row in swap_ids_result.all()]
+
+    entity_filters = [(AuditLog.entity_type == "shift") & (AuditLog.entity_id == shift_id)]
+    if assignment_ids:
+        entity_filters.append(
+            (AuditLog.entity_type == "assignment") & (AuditLog.entity_id.in_(assignment_ids)),
+        )
+    if swap_ids:
+        entity_filters.append(
+            (AuditLog.entity_type == "swap_request") & (AuditLog.entity_id.in_(swap_ids)),
+        )
+
+    result = await db.execute(
+        select(AuditLog).where(or_(*entity_filters)).order_by(AuditLog.created_at.desc()),
+    )
+    return result.scalars().all()

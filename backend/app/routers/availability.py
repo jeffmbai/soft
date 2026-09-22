@@ -68,8 +68,14 @@ async def update_my_availability(
     user: User = Depends(require_roles(UserRole.staff)),
     db: AsyncSession = Depends(get_db),
 ):
-    if user.staff_profile:
-        user.staff_profile.availability_timezone = body.timezone
+    result = await db.execute(
+        select(User)
+        .where(User.id == user.id)
+        .options(selectinload(User.staff_profile)),
+    )
+    db_user = result.scalar_one()
+    if db_user.staff_profile:
+        db_user.staff_profile.availability_timezone = body.timezone
 
     await db.execute(delete(AvailabilityWindow).where(AvailabilityWindow.user_id == user.id))
     await db.execute(delete(AvailabilityException).where(AvailabilityException.user_id == user.id))
@@ -101,9 +107,12 @@ async def update_my_availability(
 @router.get("/my/shifts", response_model=list[MyShiftResponse])
 async def my_shifts(
     week: date | None = None,
+    upcoming: bool = False,
     user: User = Depends(require_roles(UserRole.staff)),
     db: AsyncSession = Depends(get_db),
 ):
+    from datetime import datetime, timedelta, timezone
+
     q = (
         select(ShiftAssignment, Shift)
         .join(Shift, ShiftAssignment.shift_id == Shift.id)
@@ -111,8 +120,9 @@ async def my_shifts(
         .options(selectinload(Shift.location))
         .order_by(Shift.starts_at)
     )
-    if week:
-        from datetime import datetime, timedelta, timezone
+    if upcoming:
+        q = q.where(Shift.starts_at >= datetime.now(timezone.utc))
+    elif week:
         week_start = week - timedelta(days=week.weekday())
         week_end = week_start + timedelta(days=7)
         q = q.where(
