@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/AuthProvider";
 import { fetchLocations } from "@/lib/api";
+import Loading from "@/components/Loading";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -23,7 +24,7 @@ export default function DashboardPage() {
         <section>
           <h2 className="text-lg font-semibold mb-3">Locations</h2>
           {isLoading ? (
-            <p className="text-slate-500">Loading locations...</p>
+            <Loading variant="inline" size="sm" message="Fetching locations…" />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {locations?.map((loc) => (

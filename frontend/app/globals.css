@@ -1,5 +1,124 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary-container: #131b2e;
+  --color-surface-container: #eceef0;
+  --color-secondary: #006a61;
+  --color-primary-fixed: #dae2fd;
+  --color-inverse-primary: #bec6e0;
+  --color-secondary-fixed: #89f5e7;
+  --color-tertiary: #000000;
+  --color-on-secondary-container: #006f66;
+  --color-outline: #76777d;
+  --color-on-primary-fixed-variant: #3f465c;
+  --color-on-secondary-fixed-variant: #005049;
+  --color-on-background: #191c1e;
+  --color-on-error: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container-high: #e6e8ea;
+  --color-secondary-fixed-dim: #6bd8cb;
+  --color-tertiary-container: #001a42;
+  --color-on-secondary: #ffffff;
+  --color-on-tertiary-fixed-variant: #004395;
+  --color-outline-variant: #c6c6cd;
+  --color-surface-variant: #e0e3e5;
+  --color-secondary-container: #86f2e4;
+  --color-surface: #f7f9fb;
+  --color-background: #f7f9fb;
+  --color-primary-fixed-dim: #bec6e0;
+  --color-surface-tint: #565e74;
+  --color-surface-bright: #f7f9fb;
+  --color-tertiary-fixed-dim: #adc6ff;
+  --color-on-primary-fixed: #131b2e;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-primary-container: #7c839b;
+  --color-on-surface-variant: #45464d;
+  --color-inverse-on-surface: #eff1f3;
+  --color-tertiary-fixed: #d8e2ff;
+  --color-on-error-container: #93000a;
+  --color-error: #ba1a1a;
+  --color-on-tertiary-fixed: #001a42;
+  --color-surface-dim: #d8dadc;
+  --color-on-secondary-fixed: #00201d;
+  --color-on-primary: #ffffff;
+  --color-on-surface: #191c1e;
+  --color-inverse-surface: #2d3133;
+  --color-on-tertiary: #ffffff;
+  --color-primary: #000000;
+  --color-surface-container-highest: #e0e3e5;
+  --color-error-container: #ffdad6;
+  --color-on-tertiary-container: #3980f4;
+
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+
+  --spacing-space-lg: 1.25rem;
+  --spacing-space-md: 0.75rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-xl: 2rem;
+  --spacing-gutter-dense: 0.5rem;
+  --spacing-margin: 1.5rem;
+  --spacing-gutter: 1rem;
+
+  --font-data-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-headline-xl-mobile: var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+  --font-label-md: var(--font-inter), ui-sans-serif, sans-serif;
+  --font-title-sm: var(--font-inter), ui-sans-serif, sans-serif;
+  --font-headline-lg: var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+  --font-badge-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-headline-xl: var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+  --font-headline-md: var(--font-plus-jakarta), ui-sans-serif, sans-serif;
+  --font-body-sm: var(--font-inter), ui-sans-serif, sans-serif;
+  --font-body-md: var(--font-inter), ui-sans-serif, sans-serif;
+
+  --text-data-mono: 12px;
+  --text-data-mono--line-height: 16px;
+  --text-data-mono--font-weight: 500;
+  --text-headline-xl-mobile: 28px;
+  --text-headline-xl-mobile--line-height: 36px;
+  --text-headline-xl-mobile--letter-spacing: -0.01em;
+  --text-headline-xl-mobile--font-weight: 700;
+  --text-label-md: 12px;
+  --text-label-md--line-height: 16px;
+  --text-label-md--letter-spacing: 0.01em;
+  --text-label-md--font-weight: 600;
+  --text-title-sm: 16px;
+  --text-title-sm--line-height: 24px;
+  --text-title-sm--font-weight: 600;
+  --text-headline-lg: 24px;
+  --text-headline-lg--line-height: 32px;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+  --text-badge-mono: 11px;
+  --text-badge-mono--line-height: 14px;
+  --text-badge-mono--letter-spacing: 0.04em;
+  --text-badge-mono--font-weight: 600;
+  --text-headline-xl: 36px;
+  --text-headline-xl--line-height: 44px;
+  --text-headline-xl--letter-spacing: -0.02em;
+  --text-headline-xl--font-weight: 700;
+  --text-headline-md: 20px;
+  --text-headline-md--line-height: 28px;
+  --text-headline-md--font-weight: 600;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 18px;
+  --text-body-sm--font-weight: 400;
+  --text-body-md: 14px;
+  --text-body-md--line-height: 20px;
+  --text-body-md--font-weight: 400;
+}
+
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-background text-on-surface font-body-md text-body-md antialiased;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
 }
