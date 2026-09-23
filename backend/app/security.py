@@ -34,3 +34,9 @@ def create_refresh_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+
+
+def create_ws_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload = {"sub": subject, "type": "ws", "exp": expire}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)

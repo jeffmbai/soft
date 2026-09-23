@@ -33,6 +33,7 @@ from app.services.access import get_accessible_location_ids, require_location_ac
 from app.services.audit import log_change
 from app.services.concurrency import count_shift_assignments, lock_shift
 from app.services.constraints import suggest_alternatives, validate_assignment
+from app.services.duty import notify_duty_change
 from app.services.swaps import cancel_swaps_for_shift
 
 router = APIRouter(tags=["scheduling"])
@@ -210,19 +211,45 @@ async def update_shift(
         raise HTTPException(status_code=409, detail="Shift was modified by another user")
 
     before = {"starts_at": shift.starts_at.isoformat(), "headcount": shift.headcount}
-    if body.starts_at is not None:
-        shift.starts_at = body.starts_at
-    if body.ends_at is not None:
-        shift.ends_at = body.ends_at
+    location = shift.location
+
+    if body.local_date and body.local_start_time and body.local_end_time:
+        tz = ZoneInfo(location.timezone)
+
+        def parse_local(t: str) -> dt_time:
+            h, m = t.split(":")
+            return dt_time(int(h), int(m))
+
+        starts_at = datetime.combine(body.local_date, parse_local(body.local_start_time), tzinfo=tz).astimezone(timezone.utc)
+        ends_local = datetime.combine(body.local_date, parse_local(body.local_end_time), tzinfo=tz)
+        if parse_local(body.local_end_time) <= parse_local(body.local_start_time):
+            ends_local += timedelta(days=1)
+        shift.starts_at = starts_at
+        shift.ends_at = ends_local.astimezone(timezone.utc)
+    else:
+        if body.starts_at is not None:
+            shift.starts_at = body.starts_at
+        if body.ends_at is not None:
+            shift.ends_at = body.ends_at
+
     if body.required_skill is not None:
         shift.required_skill = body.required_skill
     if body.headcount is not None:
+        if body.headcount < len(shift.assignments):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Headcount cannot be less than current assignments ({len(shift.assignments)})",
+            )
         shift.headcount = body.headcount
+
+    if shift.ends_at <= shift.starts_at:
+        raise HTTPException(status_code=400, detail="ends_at must be after starts_at")
     shift.version += 1
 
     await cancel_swaps_for_shift(db, shift.id, user.id)
     await log_change(db, entity_type="shift", entity_id=shift.id, actor_id=user.id, before=before, after={"version": shift.version})
     await db.commit()
+    await notify_duty_change()
     shift = await _load_shift(db, shift_id)
     return _serialize_shift(shift)
 
@@ -298,6 +325,7 @@ async def assign_staff(
         after={"user_id": str(body.user_id), "user_name": staff.name if staff else ""},
     )
     await db.commit()
+    await notify_duty_change()
     await db.refresh(assignment)
     return _to_assign_result(result, assignment.id)
 
@@ -352,6 +380,7 @@ async def unassign(
     await require_location_access(shift.location_id, user, db)
     await db.delete(assignment)
     await db.commit()
+    await notify_duty_change()
 
 
 @router.post(
@@ -403,6 +432,7 @@ async def publish_week(
         after={"week_start": week_start.isoformat(), "shifts": len(shifts)},
     )
     await db.commit()
+    await notify_duty_change()
     return PublishWeekResponse(
         location_id=location_id,
         week_start=week_start,
@@ -449,6 +479,7 @@ async def unpublish_week(
         schedule_week.published_by = None
 
     await db.commit()
+    await notify_duty_change()
     return PublishWeekResponse(
         location_id=location_id,
         week_start=week_start,

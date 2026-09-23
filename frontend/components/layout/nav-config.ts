@@ -2,7 +2,6 @@ export type NavItem = {
   href: string;
   label: string;
   icon: string;
-  badge?: string;
   pulse?: boolean;
   roles: Array<"admin" | "manager" | "staff">;
 };
@@ -25,7 +24,6 @@ export const mainNav: NavItem[] = [
     href: "/open-shifts",
     label: "Open Shifts Pool",
     icon: "event_available",
-    badge: "2 urgent",
     roles: ["admin", "manager", "staff"],
   },
   {
@@ -59,3 +57,16 @@ export const mainNav: NavItem[] = [
     roles: ["admin"],
   },
 ];
+
+export const pageTitles: Record<string, string> = {
+  ...Object.fromEntries(mainNav.map((item) => [item.href, item.label])),
+  "/swaps": "Open Shifts Pool",
+  "/profile": "Profile",
+  "/settings": "Settings",
+};
+
+export function titleForPath(pathname: string): string {
+  if (pageTitles[pathname]) return pageTitles[pathname];
+  const match = mainNav.find((item) => pathname.startsWith(item.href));
+  return match?.label ?? "ShiftSync";
+}

@@ -13,6 +13,7 @@ from app.models.swap import SwapRequest
 from app.models.user import User
 from app.schemas.swaps import SwapCreateRequest, SwapRequestResponse, SwapShiftBrief, SwapUserBrief
 from app.services.access import get_accessible_location_ids, require_location_access
+from app.services.duty import notify_duty_change
 from app.services.swaps import (
     accept_swap,
     approve_swap,
@@ -198,6 +199,7 @@ async def post_claim(
 ):
     assignment = await claim_open_shift(db, swap_id, user)
     await db.commit()
+    await notify_duty_change()
     return {"assignment_id": str(assignment.id), "shift_id": str(assignment.shift_id)}
 
 

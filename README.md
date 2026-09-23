@@ -2,7 +2,7 @@
 
 Multi-location shift scheduling platform for the Priority Soft assessment.
 
-**Current phase:** Phase 4 complete (live polling, write concurrency).
+**Current phase:** Phase 5 complete (WebSockets, Redis, live floor & duty).
 
 ## Stack
 
@@ -37,6 +37,7 @@ All accounts use password: **`password123`**
 
 | Area | Route | Who |
 | --- | --- | --- |
+| Live floor & duty | `/on-duty` | Admin, Manager |
 | Operations dashboard | `/dashboard` | Admin, Manager |
 | Weekly schedule | `/schedule` | Admin, Manager |
 | Open shifts / swaps | `/open-shifts` | Admin, Manager, Staff |
@@ -60,6 +61,7 @@ alembic upgrade head
 python -m scripts.seed
 python -m scripts.seed scheduling
 python -m scripts.seed swaps
+python -m scripts.seed duty
 uvicorn app.main:app --reload
 ```
 
@@ -102,10 +104,11 @@ soft/
 - [Phase 2 decisions](docs/phase-2-decisions.md)
 - [Phase 3 decisions](docs/phase-3-decisions.md)
 - [Phase 4 decisions](docs/phase-4-decisions.md)
+- [Phase 5 decisions](docs/phase-5-decisions.md)
 - [Role permissions](docs/role-permissions.md)
 
 ## Known Limitations
 
 - Email is simulated (not real SMTP)
-- Live updates use polling + refetch-on-focus (no WebSockets)
-- Clock-in / on-duty uses shift time windows only
+- On-duty WebSocket requires `NEXT_PUBLIC_WS_URL` (defaults to `ws://localhost:8000`)
+- Staff clock-in UI on My Schedule not wired yet (API supports it)

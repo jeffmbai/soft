@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   db:
     image: postgres:16-alpine
     environment:
@@ -21,14 +31,17 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://shiftsync:shiftsync@db:5432/shiftsync
+      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: dev-secret-key-change-in-production
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend:/app
-    command: sh -c "alembic upgrade head && python -m scripts.seed && python -m scripts.seed scheduling && python -m scripts.seed swaps && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "alembic upgrade head && python -m scripts.seed && python -m scripts.seed scheduling && python -m scripts.seed swaps && python -m scripts.seed duty && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build:
@@ -38,6 +51,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
       BACKEND_URL: http://backend:8000
     volumes:
       - ./frontend:/app

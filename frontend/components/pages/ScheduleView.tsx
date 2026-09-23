@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import AddShiftDrawer from "@/components/pages/AddShiftDrawer";
 import AssignShiftModal from "@/components/pages/AssignShiftModal";
+import EditShiftDrawer from "@/components/pages/EditShiftDrawer";
 import {
   AlertBanner,
   Badge,
@@ -63,6 +64,7 @@ export default function ScheduleView() {
   const [weekStart, setWeekStart] = useState(mondayOfWeek());
   const [locationId, setLocationId] = useState<string>("");
   const [assignShiftTarget, setAssignShiftTarget] = useState<ShiftResponse | null>(null);
+  const [editShiftTarget, setEditShiftTarget] = useState<ShiftResponse | null>(null);
 
   const dayHeaders = useMemo(() => weekDayHeaders(weekStart), [weekStart]);
 
@@ -244,33 +246,36 @@ export default function ScheduleView() {
                       const total = shift.headcount;
                       const full = filled >= total;
                       const past = isShiftPast(shift.starts_at);
-                      const canAssign = !past && !full;
                       return (
                         <button
                           key={shift.id}
                           type="button"
-                          disabled={!canAssign}
+                          disabled={past}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (canAssign) setAssignShiftTarget(shift);
+                            if (past) return;
+                            setEditShiftTarget(shift);
                           }}
                           className={cn(
-                            "text-left p-2 rounded-xl border text-xs transition-colors",
+                            "text-left p-2 rounded-xl border text-xs transition-colors w-full",
                             past && "opacity-60 cursor-not-allowed border-outline-variant/50 bg-surface-container-low",
-                            !past && full && "border-secondary/30 bg-secondary/5",
-                            !past && !full && "border-outline-variant bg-surface hover:border-secondary cursor-pointer",
+                            !past && "border-outline-variant bg-surface hover:border-secondary cursor-pointer",
+                            !past && full && "border-slate-300 bg-slate-50",
                           )}
                         >
                           <div className="font-data-mono">
                             {activeLocation &&
                               formatShiftRange(shift.starts_at, shift.ends_at, activeLocation.timezone)}
                           </div>
-                          <div className={cn("mt-1 font-medium", past ? "text-outline" : full ? "text-secondary" : "text-warning")}>
+                          <div className={cn("mt-1 font-medium", past ? "text-outline" : full ? "text-slate-700" : "text-warning")}>
                             {past ? "Past" : `${filled}/${total} filled`}
                           </div>
                           {shift.assignments.map((a) => (
                             <div key={a.id} className="text-primary font-medium truncate">{a.user_name}</div>
                           ))}
+                          {!past && (
+                            <div className="mt-1 text-[10px] text-on-surface-variant">Click to edit</div>
+                          )}
                         </button>
                       );
                     })}
@@ -295,6 +300,22 @@ export default function ScheduleView() {
         prefillDayOffset={prefill?.dayOffset ?? 0}
         prefillSkill={prefill?.skill ?? "server"}
         onCreated={invalidateSchedule}
+      />
+
+      <EditShiftDrawer
+        open={!!editShiftTarget}
+        shift={editShiftTarget}
+        location={activeLocation}
+        onClose={() => setEditShiftTarget(null)}
+        onUpdated={invalidateSchedule}
+        onAssign={
+          editShiftTarget && editShiftTarget.assignments.length < editShiftTarget.headcount
+            ? () => {
+                setAssignShiftTarget(editShiftTarget);
+                setEditShiftTarget(null);
+              }
+            : undefined
+        }
       />
 
       {assignShiftTarget && activeLocation && (

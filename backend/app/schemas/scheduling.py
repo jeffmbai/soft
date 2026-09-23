@@ -37,6 +37,9 @@ class ShiftCreateRequest(BaseModel):
 class ShiftUpdateRequest(BaseModel):
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    local_date: date | None = None
+    local_start_time: str | None = None
+    local_end_time: str | None = None
     required_skill: Skill | None = None
     headcount: int | None = Field(default=None, ge=1, le=20)
     version: int
@@ -92,6 +95,18 @@ class PublishWeekResponse(BaseModel):
     shifts_published: int
 
 
+class MyShiftDutyInfo(BaseModel):
+    duty_status: str | None = None
+    clocked_in_at: datetime | None = None
+    can_clock_in: bool = False
+    can_clock_out: bool = False
+    is_active: bool = False
+    seconds_on_shift: int | None = None
+    seconds_until_break: int | None = None
+    break_available: bool = False
+    seconds_until_shift_end: int | None = None
+
+
 class MyShiftResponse(BaseModel):
     assignment_id: UUID
     shift_id: UUID
@@ -102,6 +117,7 @@ class MyShiftResponse(BaseModel):
     ends_at: datetime
     required_skill: Skill
     status: ShiftStatus
+    duty: MyShiftDutyInfo | None = None
 
 
 class AvailabilityWindowInput(BaseModel):

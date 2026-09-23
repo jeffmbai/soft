@@ -351,11 +351,117 @@ async def seed_swaps() -> None:
         print("Swap seed complete!")
 
 
+async def seed_duty() -> None:
+    """Live floor demo: active published shifts, clock-ins, tardy staff, and gaps."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.duty import DutyClock
+    from app.models.enums import ShiftStatus, Skill
+    from app.models.shift import ScheduleWeek
+
+    async with async_session() as db:
+        existing = await db.execute(select(DutyClock).limit(1))
+        if existing.scalar_one_or_none():
+            print("Duty data already seeded, skipping.")
+            return
+
+        loc_result = await db.execute(select(Location))
+        locations = {l.name: l for l in loc_result.scalars().all()}
+        pier = locations["Pier House"]
+        harbor = locations["Harbor Grill"]
+
+        staff_result = await db.execute(select(User).where(User.role == UserRole.staff))
+        staff = {u.email: u for u in staff_result.scalars().all()}
+
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(hours=1, minutes=30)
+        end = now + timedelta(hours=6, minutes=30)
+
+        pier_shift = Shift(
+            location_id=pier.id,
+            starts_at=start,
+            ends_at=end,
+            required_skill=Skill.server,
+            headcount=2,
+            status=ShiftStatus.published,
+        )
+        harbor_shift = Shift(
+            location_id=harbor.id,
+            starts_at=start,
+            ends_at=end,
+            required_skill=Skill.line_cook,
+            headcount=2,
+            status=ShiftStatus.published,
+        )
+        pier_bar = Shift(
+            location_id=pier.id,
+            starts_at=start,
+            ends_at=end,
+            required_skill=Skill.bartender,
+            headcount=1,
+            status=ShiftStatus.published,
+        )
+        db.add_all([pier_shift, harbor_shift, pier_bar])
+        await db.flush()
+
+        sam_assign = ShiftAssignment(shift_id=pier_shift.id, user_id=staff["sam@coastaleats.com"].id)
+        riley_assign = ShiftAssignment(shift_id=pier_shift.id, user_id=staff["riley@coastaleats.com"].id)
+        casey_assign = ShiftAssignment(shift_id=harbor_shift.id, user_id=staff["casey@coastaleats.com"].id)
+        maria_assign = ShiftAssignment(shift_id=pier_bar.id, user_id=staff["maria@coastaleats.com"].id)
+        db.add_all([sam_assign, riley_assign, casey_assign, maria_assign])
+        await db.flush()
+
+        clocked_90m_ago = now - timedelta(hours=1, minutes=15)
+        clocked_30m_ago = now - timedelta(minutes=30)
+
+        db.add_all([
+            DutyClock(
+                assignment_id=sam_assign.id,
+                user_id=sam_assign.user_id,
+                shift_id=pier_shift.id,
+                location_id=pier.id,
+                clocked_in_at=clocked_90m_ago,
+            ),
+            DutyClock(
+                assignment_id=maria_assign.id,
+                user_id=maria_assign.user_id,
+                shift_id=pier_bar.id,
+                location_id=pier.id,
+                clocked_in_at=clocked_30m_ago,
+            ),
+        ])
+
+        week_start = now.date() - timedelta(days=now.date().weekday())
+        for loc in (pier, harbor):
+            week_row = (
+                await db.execute(
+                    select(ScheduleWeek).where(
+                        ScheduleWeek.location_id == loc.id,
+                        ScheduleWeek.week_start == week_start,
+                    ),
+                )
+            ).scalar_one_or_none()
+            if not week_row:
+                db.add(
+                    ScheduleWeek(
+                        location_id=loc.id,
+                        week_start=week_start,
+                        published_at=now,
+                    ),
+                )
+
+        await db.commit()
+        print("Duty seed complete!")
+        print("Live floor: Pier House (Sam clocked in, Riley tardy) + Harbor (Casey tardy, 1 gap) + Pier bar (Maria on duty)")
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "scheduling":
         asyncio.run(seed_scheduling())
     elif len(sys.argv) > 1 and sys.argv[1] == "swaps":
         asyncio.run(seed_swaps())
+    elif len(sys.argv) > 1 and sys.argv[1] == "duty":
+        asyncio.run(seed_duty())
     else:
         asyncio.run(seed())
