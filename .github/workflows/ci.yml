@@ -17,16 +17,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  DOMAIN: ${{ vars.DOMAIN }}
-  API_DOMAIN: ${{ vars.API_DOMAIN }}
-  NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
-
 jobs:
   backend-checks:
     name: Backend — migrate and health
     runs-on: ubuntu-latest
-    environment: production
     defaults:
       run:
         working-directory: backend
@@ -96,20 +90,14 @@ jobs:
   frontend-build:
     name: Frontend — build
     runs-on: ubuntu-latest
-    environment: production
     defaults:
       run:
         working-directory: frontend
     env:
       BACKEND_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_WS_URL: ws://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4
-
-      - name: Validate frontend build config
-        run: |
-          test -n "${API_DOMAIN}" || { echo "::error::Set API_DOMAIN in the production environment (e.g. softapi.serverops.co.ke)"; exit 1; }
-          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Set NEXT_PUBLIC_WS_URL or API_DOMAIN in the production environment"; exit 1; }
-          echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
 
       - uses: actions/setup-node@v4
         with:
@@ -131,13 +119,17 @@ jobs:
       - frontend-build
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     environment: production
+    env:
+      DOMAIN: ${{ vars.DOMAIN }}
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate image build config
+      - name: Validate production config
         run: |
-          test -n "${API_DOMAIN}" || { echo "::error::Set API_DOMAIN in the production environment (e.g. softapi.serverops.co.ke)"; exit 1; }
-          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Set NEXT_PUBLIC_WS_URL or API_DOMAIN in the production environment"; exit 1; }
+          test -n "${API_DOMAIN}" || { echo "::error::Add API_DOMAIN to GitHub → Settings → Environments → production → Variables"; exit 1; }
+          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Add NEXT_PUBLIC_WS_URL or API_DOMAIN to the production environment"; exit 1; }
           echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
 
       - run: echo "GHCR_IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
@@ -191,6 +183,9 @@ jobs:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       IMAGE_TAG: ${{ github.sha }}
       GHCR_IMAGE_OWNER: ${{ github.repository_owner }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
       SSL_CERT_DOMAINS: ${{ vars.SSL_CERT_DOMAINS }}
       CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
       BACKEND_URL: ${{ vars.BACKEND_URL }}
