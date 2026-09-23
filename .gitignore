@@ -25,7 +25,6 @@ postgres_data/
 
 
 # docs
-docs/
 # Next.js
 .next/
 
