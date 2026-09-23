@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/cn";
+import { liveQueryOptions } from "@/lib/live-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
 function needsApproval(n: NotificationItem): boolean {
@@ -31,7 +32,7 @@ export default function NotificationsMenu() {
   const { data: notifications } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
-    refetchInterval: 30_000,
+    ...liveQueryOptions(),
   });
 
   const unread = (notifications ?? []).filter((n) => !n.read_at).length;

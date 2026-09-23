@@ -31,6 +31,7 @@ from app.schemas.scheduling import (
 )
 from app.services.access import get_accessible_location_ids, require_location_access
 from app.services.audit import log_change
+from app.services.concurrency import count_shift_assignments, lock_shift
 from app.services.constraints import suggest_alternatives, validate_assignment
 from app.services.swaps import cancel_swaps_for_shift
 
@@ -257,15 +258,16 @@ async def assign_staff(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    shift = await _load_shift(db, shift_id)
+    shift = await lock_shift(db, shift_id)
     location = shift.location
     await require_location_access(shift.location_id, user, db)
 
     if shift.starts_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Cannot assign staff to a shift in the past")
 
-    if len(shift.assignments) >= shift.headcount:
-        raise HTTPException(status_code=400, detail="Shift headcount full")
+    assignment_count = await count_shift_assignments(db, shift.id)
+    if assignment_count >= shift.headcount:
+        raise HTTPException(status_code=409, detail="Shift headcount full")
 
     result = await validate_assignment(
         db,

@@ -26,6 +26,7 @@ import {
 import type { Skill } from "@/lib/api";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/cn";
+import { liveQueryOptions } from "@/lib/live-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
 type SwapAction = "accept" | "approve" | "cancel" | "claim";
@@ -213,8 +214,17 @@ export default function OpenShiftsView() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: openPool, isLoading: poolLoading } = useQuery({ queryKey: ["open-shifts"], queryFn: fetchOpenShifts });
-  const { data: requests, isLoading: reqLoading } = useQuery({ queryKey: ["swap-requests"], queryFn: fetchSwapRequests });
+  const live = liveQueryOptions();
+  const { data: openPool, isLoading: poolLoading } = useQuery({
+    queryKey: ["open-shifts"],
+    queryFn: fetchOpenShifts,
+    ...live,
+  });
+  const { data: requests, isLoading: reqLoading } = useQuery({
+    queryKey: ["swap-requests"],
+    queryFn: fetchSwapRequests,
+    ...live,
+  });
 
   const mutation = useMutation({
     mutationFn: async ({ swapId, action }: { swapId: string; action: SwapAction }) => {

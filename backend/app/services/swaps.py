@@ -11,6 +11,7 @@ from app.models.shift import Shift, ShiftAssignment
 from app.models.swap import SwapRequest
 from app.models.user import User
 from app.services.audit import log_change
+from app.services.concurrency import count_shift_assignments, lock_shift
 from app.services.constraints import validate_assignment
 from app.services.notifications import notify_location_managers, notify_user
 
@@ -177,7 +178,7 @@ async def accept_swap(db: AsyncSession, swap_id: UUID, actor: User) -> SwapReque
 
 
 async def approve_swap(db: AsyncSession, swap_id: UUID, actor: User) -> SwapRequest:
-    swap = await _get_swap(db, swap_id)
+    swap = await _get_swap_for_update(db, swap_id)
     if swap.status != SwapStatus.pending_manager:
         raise HTTPException(status_code=400, detail="Swap is not awaiting manager approval")
 
@@ -186,6 +187,7 @@ async def approve_swap(db: AsyncSession, swap_id: UUID, actor: User) -> SwapRequ
 
     if swap.type == SwapType.drop:
         requester_id = assignment.user_id
+        await lock_shift(db, shift.id)
         await db.delete(assignment)
         swap.requester_assignment_id = None
         swap.status = SwapStatus.approved
@@ -310,22 +312,20 @@ async def get_claim_eligibility(
 
 
 async def claim_open_shift(db: AsyncSession, swap_id: UUID, actor: User) -> ShiftAssignment:
-    swap = await _get_swap(db, swap_id)
-    if swap.type != SwapType.drop or swap.status != SwapStatus.approved:
+    swap = await _get_swap_for_update(db, swap_id)
+    if swap.type != SwapType.drop:
         raise HTTPException(status_code=400, detail="Shift is not available to claim")
+    if swap.status != SwapStatus.approved:
+        raise HTTPException(status_code=409, detail="This shift was just claimed by someone else")
 
-    shift = await db.execute(
-        select(Shift)
-        .where(Shift.id == swap.shift_id)
-        .options(selectinload(Shift.location), selectinload(Shift.assignments)),
-    )
-    shift_obj = shift.scalar_one()
+    shift_obj = await lock_shift(db, swap.shift_id)
 
     if shift_obj.starts_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Shift is in the past")
 
-    if len(shift_obj.assignments) >= shift_obj.headcount:
-        raise HTTPException(status_code=400, detail="Shift is already full")
+    assignment_count = await count_shift_assignments(db, shift_obj.id)
+    if assignment_count >= shift_obj.headcount:
+        raise HTTPException(status_code=409, detail="Shift is already full")
 
     result = await validate_assignment(
         db,
@@ -362,18 +362,33 @@ async def claim_open_shift(db: AsyncSession, swap_id: UUID, actor: User) -> Shif
     return new_assignment
 
 
+def _swap_load_options():
+    return (
+        selectinload(SwapRequest.requester_assignment).selectinload(ShiftAssignment.user),
+        selectinload(SwapRequest.requester_assignment)
+        .selectinload(ShiftAssignment.shift)
+        .selectinload(Shift.location),
+        selectinload(SwapRequest.shift).selectinload(Shift.location),
+        selectinload(SwapRequest.target_user),
+    )
+
+
 async def _get_swap(db: AsyncSession, swap_id: UUID) -> SwapRequest:
+    result = await db.execute(
+        select(SwapRequest).where(SwapRequest.id == swap_id).options(*_swap_load_options()),
+    )
+    swap = result.scalar_one_or_none()
+    if not swap:
+        raise HTTPException(status_code=404, detail="Swap request not found")
+    return swap
+
+
+async def _get_swap_for_update(db: AsyncSession, swap_id: UUID) -> SwapRequest:
     result = await db.execute(
         select(SwapRequest)
         .where(SwapRequest.id == swap_id)
-        .options(
-            selectinload(SwapRequest.requester_assignment).selectinload(ShiftAssignment.user),
-            selectinload(SwapRequest.requester_assignment)
-            .selectinload(ShiftAssignment.shift)
-            .selectinload(Shift.location),
-            selectinload(SwapRequest.shift).selectinload(Shift.location),
-            selectinload(SwapRequest.target_user),
-        ),
+        .options(*_swap_load_options())
+        .with_for_update(),
     )
     swap = result.scalar_one_or_none()
     if not swap:

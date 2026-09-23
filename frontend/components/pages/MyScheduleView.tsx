@@ -11,6 +11,7 @@ import {
   SKILL_LABELS,
   type MyShift,
 } from "@/lib/api";
+import { liveQueryOptions, SCHEDULE_QUERY_MS } from "@/lib/live-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
 function shiftHours(startsAt: string, endsAt: string): string {
@@ -33,6 +34,7 @@ export default function MyScheduleView() {
   const { data: shifts, isLoading } = useQuery({
     queryKey: ["my-shifts", "upcoming"],
     queryFn: () => fetchMyShifts({ upcoming: true }),
+    ...liveQueryOptions(SCHEDULE_QUERY_MS),
   });
 
   const dropMutation = useMutation({

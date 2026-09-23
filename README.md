@@ -2,7 +2,7 @@
 
 Multi-location shift scheduling platform for the Priority Soft assessment.
 
-**Current phase:** Phase 3 complete (swaps, notifications, audit history).
+**Current phase:** Phase 4 complete (live polling, write concurrency).
 
 ## Stack
 
@@ -101,10 +101,11 @@ soft/
 - [Phase 1 decisions](docs/phase-1-decisions.md)
 - [Phase 2 decisions](docs/phase-2-decisions.md)
 - [Phase 3 decisions](docs/phase-3-decisions.md)
+- [Phase 4 decisions](docs/phase-4-decisions.md)
 - [Role permissions](docs/role-permissions.md)
 
 ## Known Limitations
 
 - Email is simulated (not real SMTP)
-- No WebSocket live updates yet (Phase 4)
+- Live updates use polling + refetch-on-focus (no WebSockets)
 - Clock-in / on-duty uses shift time windows only
