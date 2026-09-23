@@ -247,7 +247,7 @@ jobs:
             echo "POSTGRES_USER=${VAR_POSTGRES_USER:-shiftsync}"
             echo "POSTGRES_DB=${VAR_POSTGRES_DB:-shiftsync}"
             echo "POSTGRES_HOST_PORT=${VAR_POSTGRES_HOST_PORT:-127.0.0.1:5436}"
-            echo "REDIS_HOST_PORT=${VAR_REDIS_HOST_PORT:-127.0.0.1:6383}"
+            echo "REDIS_HOST_PORT=${VAR_REDIS_HOST_PORT:-127.0.0.1:6384}"
             echo "BACKEND_HOST_PORT=${VAR_BACKEND_HOST_PORT:-127.0.0.1:8004}"
             echo "FRONTEND_HOST_PORT=${VAR_FRONTEND_HOST_PORT:-127.0.0.1:3005}"
             echo "GATEWAY_SITE_NAME=${VAR_GATEWAY_SITE_NAME:-soft}"
