@@ -116,6 +116,8 @@ soft/
 
 - Email is simulated (not real SMTP)
 - Break timer is computed (4h rule); break start/end is not persisted
-- Live floor WebSocket is admin/manager only; staff use My Schedule polling
-- Swap `expired` status exists but no auto-expire job runs
+- Live floor uses WebSocket; schedules, swaps, and notifications use **30–60s polling** (not push)
+- Overtime cost on the dashboard uses demo hourly rates ($18/h), not payroll integration
 - `GET /health` checks Redis only, not PostgreSQL
+
+See [Assumptions & ambiguity decisions](docs/assumptions.md) for how unspecified requirements were handled.

@@ -41,6 +41,7 @@ export default function AssignShiftModal({
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<AssignResult | null>(null);
+  const [overrideReason, setOverrideReason] = useState("");
   const past = isShiftPast(shift.starts_at);
 
   const assignedIds = useMemo(
@@ -63,6 +64,10 @@ export default function AssignShiftModal({
   const duration = shiftHours(shift.starts_at, shift.ends_at);
 
   useEffect(() => {
+    setOverrideReason("");
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selectedId || past) {
       setPreview(null);
       return;
@@ -76,8 +81,18 @@ export default function AssignShiftModal({
     };
   }, [selectedId, shift.id, past]);
 
+  const blockingErrors = useMemo(
+    () => (preview?.violations ?? []).filter((v) => v.severity === "error"),
+    [preview],
+  );
+  const needsOverride = blockingErrors.some((v) => v.rule === "consecutive_days");
+  const otherBlocking = blockingErrors.filter((v) => v.rule !== "consecutive_days");
+  const canAssignWithOverride =
+    needsOverride && overrideReason.trim().length >= 3 && otherBlocking.length === 0;
+
   const assign = useMutation({
-    mutationFn: () => assignShift(shift.id, selectedId!),
+    mutationFn: () =>
+      assignShift(shift.id, selectedId!, canAssignWithOverride ? overrideReason.trim() : undefined),
     onSuccess: (res) => {
       if (res.success) {
         toastSuccess("Staff assigned", "Shift assignment saved.");
@@ -94,8 +109,10 @@ export default function AssignShiftModal({
   const canAssign =
     !past &&
     !!selectedId &&
-    (preview?.success ?? false) &&
+    ((preview?.success ?? false) || canAssignWithOverride) &&
     !assign.isPending;
+
+  const suggestions = preview?.suggestions ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-primary/25 backdrop-blur-[2px] p-0 sm:p-4">
@@ -222,7 +239,46 @@ export default function AssignShiftModal({
                 </div>
               )}
 
-              {selectedId && preview?.success && (
+              {needsOverride && (
+                <div className="space-y-2">
+                  <label htmlFor="override-reason" className="text-sm font-medium text-primary">
+                    Manager override reason (7th consecutive day)
+                  </label>
+                  <textarea
+                    id="override-reason"
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    rows={2}
+                    placeholder="Document why this assignment is necessary…"
+                    className="w-full rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-secondary/40"
+                  />
+                  <p className="text-xs text-on-surface-variant">
+                    A reason of at least 3 characters is required to override the consecutive-day rule.
+                  </p>
+                </div>
+              )}
+
+              {suggestions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-primary">Suggested alternatives</p>
+                  <ul className="space-y-2">
+                    {suggestions.map((s) => (
+                      <li key={s.user_id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(s.user_id)}
+                          className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-secondary/30 bg-secondary/5 hover:bg-secondary/10 text-left transition-colors"
+                        >
+                          <span className="font-medium text-primary">{s.name}</span>
+                          <span className="text-xs text-on-surface-variant">{s.reason}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedId && preview?.success && !needsOverride && (
                 <AlertBanner
                   variant="info"
                   icon="check_circle"

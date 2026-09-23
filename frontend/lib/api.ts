@@ -300,6 +300,8 @@ export interface AuditLogListItem extends AuditLogEntry {
 export type AuditLogParams = {
   location_id?: string;
   entity_type?: "shift" | "assignment" | "swap_request" | "schedule_week";
+  date_from?: string;
+  date_to?: string;
   limit?: number;
   offset?: number;
 };
@@ -311,6 +313,14 @@ export async function fetchShiftHistory(shiftId: string): Promise<AuditLogEntry[
 
 export async function fetchAuditLogs(params?: AuditLogParams): Promise<AuditLogListItem[]> {
   const { data } = await api.get<AuditLogListItem[]>("/audit", { params });
+  return data;
+}
+
+export async function exportAuditCsv(params?: AuditLogParams): Promise<Blob> {
+  const { data } = await api.get<Blob>("/audit/export", {
+    params,
+    responseType: "blob",
+  });
   return data;
 }
 

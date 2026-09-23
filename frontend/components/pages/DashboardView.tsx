@@ -61,8 +61,11 @@ import {
   staffHoursChart,
   totalScheduledHours,
 } from "@/lib/dashboard-metrics";
+import { computeFairnessReport } from "@/lib/fairness-metrics";
+import { computeOvertimeCost, formatUsd } from "@/lib/overtime-cost";
 import { liveQueryOptions } from "@/lib/live-query";
 import { cn } from "@/lib/cn";
+import FairnessPanel from "@/components/pages/FairnessPanel";
 
 type DrillState = { key: string; datum: ChartDatum } | null;
 
@@ -358,6 +361,11 @@ function ManagerDashboard() {
   const { drill, toggle, clear, activeId: drillActiveId } = useChartDrill();
   const tz = activeLocation?.timezone ?? "UTC";
   const shifts = schedule?.shifts ?? [];
+  const otProjection = useMemo(() => computeOvertimeCost(staff), [staff]);
+  const fairnessReport = useMemo(
+    () => computeFairnessReport(shifts, staff, tz),
+    [shifts, staff, tz],
+  );
 
   const shiftsByDayDrill = (): { title: string; items: DrillItem[] } | null => {
     if (drill?.key !== "mgr-shifts-day") return null;
@@ -580,6 +588,48 @@ function ManagerDashboard() {
         </Card>
       </div>
 
+      <FairnessPanel report={fairnessReport} locationLabel={activeLocation?.name} />
+
+      <Card className="space-y-3">
+        <CardHeader
+          title="Projected labor cost"
+          subtitle={`Demo rates · ${formatUsd(otProjection.totalLaborCost)} total this week`}
+        />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-surface-container-low px-4 py-3 text-center">
+            <p className="text-[10px] uppercase text-outline font-data-mono">OT hours</p>
+            <p className="font-headline-md font-bold text-warning mt-1">
+              {otProjection.projectedOtHours.toFixed(1)}h
+            </p>
+          </div>
+          <div className="rounded-xl bg-surface-container-low px-4 py-3 text-center">
+            <p className="text-[10px] uppercase text-outline font-data-mono">OT cost</p>
+            <p className="font-headline-md font-bold text-warning mt-1">
+              {formatUsd(otProjection.projectedOtCost)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-surface-container-low px-4 py-3 text-center">
+            <p className="text-[10px] uppercase text-outline font-data-mono">Staff at 35h+</p>
+            <p className="font-headline-md font-bold text-primary mt-1">{otProjection.staffAtRisk}</p>
+          </div>
+        </div>
+        {otProjection.byStaff.some((s) => s.otHours > 0) && (
+          <ul className="divide-y divide-outline-variant text-sm">
+            {otProjection.byStaff
+              .filter((s) => s.otHours > 0)
+              .slice(0, 5)
+              .map((s) => (
+                <li key={s.id} className="py-2 flex justify-between gap-2">
+                  <span className="font-medium">{s.name}</span>
+                  <span className="font-data-mono text-warning">
+                    +{s.otHours.toFixed(1)}h OT · {formatUsd(s.otCost)}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </Card>
+
       {otWarnings.length > 0 && (
         <>
           <AlertBanner
@@ -643,6 +693,11 @@ function AdminDashboard() {
     queryKey: ["duty-floor"],
     queryFn: fetchDutyFloor,
     ...liveQueryOptions(),
+  });
+
+  const { data: allStaff = [] } = useQuery({
+    queryKey: ["staff", "network"],
+    queryFn: () => fetchStaff(),
   });
 
   const { drill, toggle, clear, activeId } = useChartDrill();
@@ -716,6 +771,12 @@ function AdminDashboard() {
   const admCoverageDrillData = admCoverageDrill();
   const admRoleMixDrillData = admRoleMixDrill();
   const admShiftsLocDrillData = admShiftsLocDrill();
+  const otProjection = computeOvertimeCost(allStaff);
+  const fairnessReport = computeFairnessReport(
+    allShifts,
+    allStaff,
+    (s) => tzByLocation[s.location_id] ?? "UTC",
+  );
 
   return (
     <div className="flex flex-col gap-space-lg pb-24">
@@ -836,6 +897,32 @@ function AdminDashboard() {
           />
         </ChartCard>
       </div>
+
+      <FairnessPanel report={fairnessReport} locationLabel="Network-wide" />
+
+      <Card className="space-y-3">
+        <CardHeader
+          title="Projected overtime cost"
+          subtitle={`${formatUsd(otProjection.projectedOtCost)} OT labor · ${formatUsd(otProjection.totalLaborCost)} total`}
+        />
+        {otProjection.byStaff.some((s) => s.otHours > 0) ? (
+          <ul className="divide-y divide-outline-variant text-sm">
+            {otProjection.byStaff
+              .filter((s) => s.otHours > 0)
+              .slice(0, 6)
+              .map((s) => (
+                <li key={s.id} className="py-2 flex justify-between gap-2">
+                  <span className="font-medium">{s.name}</span>
+                  <span className="font-data-mono text-warning">
+                    {s.assignedHours.toFixed(1)}h · {formatUsd(s.otCost)} OT
+                  </span>
+                </li>
+              ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-on-surface-variant">No staff projected over 40h this week.</p>
+        )}
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {locations.map((loc) => {

@@ -1,3 +1,4 @@
+from datetime import date, datetime, time, timezone
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -18,6 +19,8 @@ async def list_audit_logs(
     user,
     location_id: UUID | None = None,
     entity_type: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[AuditLogListItem]:
@@ -60,6 +63,10 @@ async def list_audit_logs(
     filters = [or_(*conditions)]
     if entity_type:
         filters.append(AuditLog.entity_type == entity_type)
+    if date_from is not None:
+        filters.append(AuditLog.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to is not None:
+        filters.append(AuditLog.created_at <= datetime.combine(date_to, time.max, tzinfo=timezone.utc))
 
     query = (
         select(AuditLog, User.name.label("actor_name"))

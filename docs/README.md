@@ -14,6 +14,7 @@ ShiftSync is a multi-location staff scheduling platform built for **Coastal Eats
 | [Role Permissions](role-permissions.md) | Route access and capability matrix by role |
 | [API Reference](api-reference.md) | REST and WebSocket endpoint summary |
 | [Development Guide](development.md) | Local setup, Docker, migrations, seed data, environment variables |
+| [Assumptions & Ambiguities](assumptions.md) | Decisions for unspecified requirements (certification, fairness, real-time, etc.) |
 | [Contabo Deployment](deployment-contabo.md) | Shared VPS deploy, CI/CD, TLS, gateway, troubleshooting |
 
 ## Quick links

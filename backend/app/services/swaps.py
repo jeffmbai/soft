@@ -16,6 +16,37 @@ from app.services.constraints import validate_assignment
 from app.services.notifications import notify_location_managers, notify_user
 
 
+async def expire_stale_drops(db: AsyncSession) -> int:
+    """Mark unclaimed drop requests expired once past expires_at (24h before shift)."""
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(SwapRequest).where(
+            SwapRequest.type == SwapType.drop,
+            SwapRequest.status.in_(
+                [SwapStatus.pending_counterparty, SwapStatus.pending_manager, SwapStatus.approved],
+            ),
+            SwapRequest.expires_at.isnot(None),
+            SwapRequest.expires_at <= now,
+        ),
+    )
+    swaps = result.scalars().all()
+    for swap in swaps:
+        swap.status = SwapStatus.expired
+        if swap.requester_assignment_id:
+            assignment = await db.get(ShiftAssignment, swap.requester_assignment_id)
+            if assignment and assignment.status == AssignmentStatus.pending_swap:
+                assignment.status = AssignmentStatus.assigned
+        await log_change(
+            db,
+            entity_type="swap_request",
+            entity_id=swap.id,
+            actor_id=None,
+            before={"status": "active"},
+            after={"status": SwapStatus.expired.value, "reason": "past_expires_at"},
+        )
+    return len(swaps)
+
+
 async def _load_assignment(db: AsyncSession, assignment_id: UUID) -> ShiftAssignment:
     result = await db.execute(
         select(ShiftAssignment)

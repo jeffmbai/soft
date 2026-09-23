@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import Loading from "@/components/Loading";
 import {
   Badge,
+  Button,
   Card,
   FilterBar,
   Icon,
@@ -13,9 +14,11 @@ import {
   SegmentedControl,
   Timeline,
 } from "@/components/ui";
-import { fetchAuditLogs, fetchLocations } from "@/lib/api";
+import { exportAuditCsv, fetchAuditLogs, fetchLocations } from "@/lib/api";
 import { formatAuditEntry, formatAuditTime } from "@/lib/audit-format";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/providers/AuthProvider";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 const ENTITY_TYPES = [
   { id: "all", label: "All events" },
@@ -35,22 +38,32 @@ const ENTITY_BADGE: Record<string, "live" | "warning" | "default" | "secondary">
 };
 
 export default function AuditLogView() {
+  const { user } = useAuth();
   const [locationId, setLocationId] = useState("");
   const [entityType, setEntityType] = useState<EntityFilter>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const { data: locations = [] } = useQuery({
     queryKey: ["locations"],
     queryFn: fetchLocations,
   });
 
+  const queryParams = useMemo(
+    () => ({
+      location_id: locationId || undefined,
+      entity_type: entityType === "all" ? undefined : entityType,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      limit: 150,
+    }),
+    [locationId, entityType, dateFrom, dateTo],
+  );
+
   const { data: entries = [], isLoading, isFetching } = useQuery({
-    queryKey: ["audit-logs", locationId, entityType],
-    queryFn: () =>
-      fetchAuditLogs({
-        location_id: locationId || undefined,
-        entity_type: entityType === "all" ? undefined : entityType,
-        limit: 150,
-      }),
+    queryKey: ["audit-logs", queryParams],
+    queryFn: () => fetchAuditLogs(queryParams),
     refetchInterval: 60_000,
   });
 
@@ -69,12 +82,38 @@ export default function AuditLogView() {
     return [...map.entries()];
   }, [entries]);
 
+  async function handleExport() {
+    if (user?.role !== "admin") return;
+    setExporting(true);
+    try {
+      const blob = await exportAuditCsv(queryParams);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "audit-log.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      toastSuccess("Export complete", "Audit log CSV downloaded.");
+    } catch (err) {
+      toastApiError(err, "Could not export audit log");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-space-lg pb-24">
-      <PageHeader
-        title="Audit log"
-        description="Cross-location activity — shifts, assignments, swaps, and publish events"
-      />
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <PageHeader
+          title="Audit log"
+          description="Cross-location activity — shifts, assignments, swaps, and publish events"
+        />
+        {user?.role === "admin" && (
+          <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport()}>
+            {exporting ? "Exporting…" : "Export CSV"}
+          </Button>
+        )}
+      </div>
 
       <FilterBar
         filters={[
@@ -90,6 +129,33 @@ export default function AuditLogView() {
           },
         ]}
       />
+
+      <div className="flex flex-wrap gap-3 items-end">
+        <div>
+          <label htmlFor="audit-from" className="block text-xs text-on-surface-variant mb-1">
+            From date
+          </label>
+          <input
+            id="audit-from"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label htmlFor="audit-to" className="block text-xs text-on-surface-variant mb-1">
+            To date
+          </label>
+          <input
+            id="audit-to"
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-xl border border-outline-variant bg-surface px-3 py-2 text-sm"
+          />
+        </div>
+      </div>
 
       <SegmentedControl
         size="sm"

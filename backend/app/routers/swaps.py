@@ -20,6 +20,7 @@ from app.services.swaps import (
     cancel_swap,
     claim_open_shift,
     create_swap_request,
+    expire_stale_drops,
     get_claim_eligibility,
 )
 
@@ -94,6 +95,8 @@ async def list_swap_requests(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await expire_stale_drops(db)
+    await db.commit()
     stmt = _swaps_query()
     if user.role == UserRole.staff:
         stmt = stmt.where(
@@ -119,6 +122,8 @@ async def list_open_shifts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await expire_stale_drops(db)
+    await db.commit()
     stmt = _swaps_query().where(
         SwapRequest.type == SwapType.drop,
         SwapRequest.status == SwapStatus.approved,

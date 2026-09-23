@@ -148,6 +148,14 @@ Corporate administrators oversee all sites. Staff are certified for one or more 
 - [x] **NOTIF-1** — In-app notifications for swap events and approval requests
 - [x] **NOTIF-2** — Simulated email queue (`email_outbox` table) — no real SMTP
 - [x] **NOTIF-3** — User preferences for in-app vs simulated email
+- [x] **NOTIF-4** — Staff notified on shift assign, unassign, schedule publish, and shift edit
+- [x] **NOTIF-5** — Managers notified on availability changes and overtime warnings (35h+)
+
+### 3.11 Fairness analytics
+
+- [x] **FAIR-1** — Premium shifts tagged (Fri/Sat evening, location local time)
+- [x] **FAIR-2** — Distribution report and fairness score on manager/admin dashboard
+- [x] **FAIR-3** — Under/over-scheduled staff relative to desired hours
 
 ---
 
@@ -159,7 +167,7 @@ Corporate administrators oversee all sites. Staff are certified for one or more 
 - [ ] Staff access to Live Floor page — staff use My Schedule for duty actions
 - [ ] Real SMTP email delivery — simulated via `email_outbox`
 - [ ] Location CRUD — locations are seeded; only manager assignment is editable
-- [ ] Auto-expire swap requests — `expired` status exists but no cron job runs
+- [x] Auto-expire drop requests — check-on-read marks `expired` when past `expires_at` (no cron)
 - [ ] Payroll / labor law compliance export — scheduling warnings only, not legal advice
 
 ---

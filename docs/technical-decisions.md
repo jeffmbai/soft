@@ -104,12 +104,13 @@ This document records the major architectural and implementation choices in Shif
 
 ## TD-07: Polling + WebSocket (not polling-only, not WS-everywhere)
 
-**Decision:** Use TanStack Query polling for most views; WebSocket only for the manager Live Floor page.
+**Decision:** Use TanStack Query polling for most views; WebSocket only for the manager Live Floor page. Schedule publish, swap, and assignment notifications are persisted in-app and picked up via 30s notification polling — not pushed over WebSocket.
 
 **Rationale:**
 - Open shifts, swaps, and schedules change on human time scales — 30–60s polling is sufficient
 - Live floor needs sub-minute freshness for clock events across managers viewing the same site
 - Staff duty UI uses 10s polling on My Schedule — simpler than WS for a single user
+- Documented explicitly in [Assumptions](assumptions.md) for evaluators
 
 **Polling config:** `frontend/lib/live-query.ts`
 

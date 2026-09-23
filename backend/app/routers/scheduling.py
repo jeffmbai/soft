@@ -34,6 +34,15 @@ from app.services.audit import log_change
 from app.services.concurrency import count_shift_assignments, lock_shift
 from app.services.constraints import suggest_alternatives, validate_assignment
 from app.services.duty import notify_duty_change
+from app.services.scheduling_notify import (
+    notify_managers_overtime,
+    notify_overtime_warning,
+    notify_schedule_published,
+    notify_shift_assigned,
+    notify_shift_unassigned,
+    notify_shift_updated,
+    weekly_assigned_hours,
+)
 from app.services.swaps import cancel_swaps_for_shift
 
 router = APIRouter(tags=["scheduling"])
@@ -248,6 +257,7 @@ async def update_shift(
 
     await cancel_swaps_for_shift(db, shift.id, user.id)
     await log_change(db, entity_type="shift", entity_id=shift.id, actor_id=user.id, before=before, after={"version": shift.version})
+    await notify_shift_updated(db, shift=shift, location=location)
     await db.commit()
     await notify_duty_change()
     shift = await _load_shift(db, shift_id)
@@ -324,6 +334,29 @@ async def assign_staff(
         before=None,
         after={"user_id": str(body.user_id), "user_name": staff.name if staff else ""},
     )
+    if staff:
+        await notify_shift_assigned(
+            db,
+            user_id=body.user_id,
+            shift=shift,
+            location=location,
+            actor_name=user.name,
+        )
+        assigned_hours = await weekly_assigned_hours(db, body.user_id)
+        if assigned_hours >= 35:
+            await notify_managers_overtime(
+                db,
+                location_id=shift.location_id,
+                staff_name=staff.name,
+                assigned_hours=assigned_hours,
+            )
+        if assigned_hours >= 35:
+            await notify_overtime_warning(
+                db,
+                user_id=body.user_id,
+                assigned_hours=assigned_hours,
+                location_id=shift.location_id,
+            )
     await db.commit()
     await notify_duty_change()
     await db.refresh(assignment)
@@ -378,7 +411,14 @@ async def unassign(
         raise HTTPException(status_code=404, detail="Assignment not found")
     shift = await _load_shift(db, assignment.shift_id)
     await require_location_access(shift.location_id, user, db)
+    unassigned_user_id = assignment.user_id
     await db.delete(assignment)
+    await notify_shift_unassigned(
+        db,
+        user_id=unassigned_user_id,
+        shift=shift,
+        location=shift.location,
+    )
     await db.commit()
     await notify_duty_change()
 
@@ -430,6 +470,12 @@ async def publish_week(
         actor_id=user.id,
         before=None,
         after={"week_start": week_start.isoformat(), "shifts": len(shifts)},
+    )
+    await notify_schedule_published(
+        db,
+        location=location,
+        week_start=week_start,
+        shift_ids=[s.id for s in shifts],
     )
     await db.commit()
     await notify_duty_change()

@@ -10,7 +10,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.enums import ShiftStatus, UserRole
 from app.models.shift import Shift, ShiftAssignment
-from app.models.staff import AvailabilityException, AvailabilityWindow
+from app.models.staff import AvailabilityException, AvailabilityWindow, StaffLocationCert
 from app.models.user import User
 from app.schemas.scheduling import (
     AvailabilityExceptionInput,
@@ -19,6 +19,7 @@ from app.schemas.scheduling import (
     AvailabilityWindowInput,
     MyShiftResponse,
 )
+from app.services.notifications import notify_location_managers
 
 router = APIRouter(tags=["availability"])
 
@@ -100,6 +101,23 @@ async def update_my_availability(
                 end_time=_parse_time(e.end_time) if e.end_time else None,
             )
         )
+
+    cert_result = await db.execute(
+        select(StaffLocationCert.location_id).where(
+            StaffLocationCert.user_id == user.id,
+            StaffLocationCert.decertified_at.is_(None),
+        ),
+    )
+    for (loc_id,) in cert_result.all():
+        await notify_location_managers(
+            db,
+            location_id=loc_id,
+            type="availability_changed",
+            title="Staff availability updated",
+            body=f"{user.name} updated their availability.",
+            payload={"user_id": str(user.id)},
+        )
+
     await db.commit()
     return await get_my_availability(user=user, db=db)
 
