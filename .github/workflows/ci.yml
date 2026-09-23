@@ -17,6 +17,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DOMAIN: ${{ vars.DOMAIN }}
+  API_DOMAIN: ${{ vars.API_DOMAIN }}
+  NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
+
 jobs:
   backend-checks:
     name: Backend — migrate and health
@@ -96,10 +101,15 @@ jobs:
       run:
         working-directory: frontend
     env:
-      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
       BACKEND_URL: http://127.0.0.1:8000
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate frontend build config
+        run: |
+          test -n "${API_DOMAIN}" || { echo "::error::Set API_DOMAIN in the production environment (e.g. softapi.serverops.co.ke)"; exit 1; }
+          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Set NEXT_PUBLIC_WS_URL or API_DOMAIN in the production environment"; exit 1; }
+          echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
 
       - uses: actions/setup-node@v4
         with:
@@ -121,10 +131,14 @@ jobs:
       - frontend-build
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     environment: production
-    env:
-      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate image build config
+        run: |
+          test -n "${API_DOMAIN}" || { echo "::error::Set API_DOMAIN in the production environment (e.g. softapi.serverops.co.ke)"; exit 1; }
+          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Set NEXT_PUBLIC_WS_URL or API_DOMAIN in the production environment"; exit 1; }
+          echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
 
       - run: echo "GHCR_IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
@@ -156,7 +170,7 @@ jobs:
           target: runner
           push: true
           build-args: |
-            NEXT_PUBLIC_WS_URL=${{ vars.NEXT_PUBLIC_WS_URL }}
+            NEXT_PUBLIC_WS_URL=${{ env.NEXT_PUBLIC_WS_URL }}
           tags: |
             ghcr.io/${{ env.GHCR_IMAGE_OWNER }}/soft-frontend:${{ github.sha }}
             ghcr.io/${{ env.GHCR_IMAGE_OWNER }}/soft-frontend:latest
@@ -177,10 +191,7 @@ jobs:
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       IMAGE_TAG: ${{ github.sha }}
       GHCR_IMAGE_OWNER: ${{ github.repository_owner }}
-      DOMAIN: ${{ vars.DOMAIN }}
-      API_DOMAIN: ${{ vars.API_DOMAIN }}
       SSL_CERT_DOMAINS: ${{ vars.SSL_CERT_DOMAINS }}
-      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
       CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
       BACKEND_URL: ${{ vars.BACKEND_URL }}
       POSTGRES_USER: ${{ vars.POSTGRES_USER }}
