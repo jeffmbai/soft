@@ -2,13 +2,6 @@
 
 ShiftSync is a multi-location staff scheduling platform built for **Coastal Eats**, a restaurant group operating four sites across US time zones. This documentation describes the product specification, system architecture, technical decisions, and operational workflows.
 
-**Checkbox convention:** `[x]` = implemented or allowed; `[ ]` = not implemented, not allowed, or out of scope.
-
-**Diagrams:** Markdown files embed PNG images from `images/`. Source definitions live in `sources/*.mmd`. To rebuild after editing a diagram:
-
-```bash
-cd docs && npm install && npm run build:diagrams
-```
 
 ## Contents
 
