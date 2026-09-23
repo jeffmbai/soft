@@ -23,10 +23,52 @@ from app.services.redis_bus import publish_duty_update
 
 TARDY_GRACE_MINUTES = 5
 EARLY_CLOCK_IN_MINUTES = 15
+BREAK_AFTER_HOURS = 4
 
 
 def _initials(name: str) -> str:
     return "".join(part[0] for part in name.split() if part)[:2].upper()
+
+
+def build_assignment_duty_info(
+    *,
+    now: datetime,
+    shift: Shift,
+    clock: DutyClock | None,
+) -> dict:
+    in_window = shift.starts_at - timedelta(minutes=EARLY_CLOCK_IN_MINUTES) <= now < shift.ends_at
+    is_active = in_window or (clock is not None and clock.clocked_out_at is None)
+    status = _staff_status(now=now, shift=shift, clock=clock) if is_active else None
+
+    seconds_on_shift: int | None = None
+    seconds_until_break: int | None = None
+    break_available = False
+    seconds_until_shift_end = max(0, int((shift.ends_at - now).total_seconds())) if now < shift.ends_at else 0
+
+    if clock and not clock.clocked_out_at:
+        elapsed = (now - clock.clocked_in_at).total_seconds()
+        seconds_on_shift = max(0, int(elapsed))
+        break_threshold = BREAK_AFTER_HOURS * 3600
+        if elapsed >= break_threshold:
+            break_available = True
+            seconds_until_break = 0
+        else:
+            seconds_until_break = max(0, int(break_threshold - elapsed))
+
+    can_clock_in = in_window and status in ("scheduled", "tardy")
+    can_clock_out = status == "clocked_in"
+
+    return {
+        "duty_status": status,
+        "clocked_in_at": clock.clocked_in_at if clock and not clock.clocked_out_at else None,
+        "can_clock_in": can_clock_in,
+        "can_clock_out": can_clock_out,
+        "is_active": is_active,
+        "seconds_on_shift": seconds_on_shift,
+        "seconds_until_break": seconds_until_break,
+        "break_available": break_available,
+        "seconds_until_shift_end": seconds_until_shift_end,
+    }
 
 
 def _staff_status(

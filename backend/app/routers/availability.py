@@ -113,6 +113,11 @@ async def my_shifts(
 ):
     from datetime import datetime, timedelta, timezone
 
+    from app.models.duty import DutyClock
+    from app.schemas.scheduling import MyShiftDutyInfo
+    from app.services.duty import build_assignment_duty_info
+
+    now = datetime.now(timezone.utc)
     q = (
         select(ShiftAssignment, Shift)
         .join(Shift, ShiftAssignment.shift_id == Shift.id)
@@ -121,7 +126,7 @@ async def my_shifts(
         .order_by(Shift.starts_at)
     )
     if upcoming:
-        q = q.where(Shift.starts_at >= datetime.now(timezone.utc))
+        q = q.where(Shift.ends_at >= now)
     elif week:
         week_start = week - timedelta(days=week.weekday())
         week_end = week_start + timedelta(days=7)
@@ -131,17 +136,33 @@ async def my_shifts(
         )
     result = await db.execute(q)
     rows = result.all()
-    return [
-        MyShiftResponse(
-            assignment_id=a.id,
-            shift_id=s.id,
-            location_id=s.location_id,
-            location_name=s.location.name,
-            location_timezone=s.location.timezone,
-            starts_at=s.starts_at,
-            ends_at=s.ends_at,
-            required_skill=s.required_skill,
-            status=s.status,
+    assignment_ids = [a.id for a, _ in rows]
+    clocks: dict = {}
+    if assignment_ids:
+        clock_result = await db.execute(
+            select(DutyClock)
+            .where(DutyClock.assignment_id.in_(assignment_ids), DutyClock.clocked_out_at.is_(None))
+            .order_by(DutyClock.clocked_in_at.desc()),
         )
-        for a, s in rows
-    ]
+        for clock in clock_result.scalars().all():
+            clocks.setdefault(clock.assignment_id, clock)
+
+    responses: list[MyShiftResponse] = []
+    for a, s in rows:
+        clock = clocks.get(a.id)
+        duty_data = build_assignment_duty_info(now=now, shift=s, clock=clock)
+        responses.append(
+            MyShiftResponse(
+                assignment_id=a.id,
+                shift_id=s.id,
+                location_id=s.location_id,
+                location_name=s.location.name,
+                location_timezone=s.location.timezone,
+                starts_at=s.starts_at,
+                ends_at=s.ends_at,
+                required_skill=s.required_skill,
+                status=s.status,
+                duty=MyShiftDutyInfo(**duty_data),
+            ),
+        )
+    return responses

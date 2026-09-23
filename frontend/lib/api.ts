@@ -198,6 +198,18 @@ export interface AssignResult {
   suggestions: Suggestion[];
 }
 
+export interface MyShiftDutyInfo {
+  duty_status: "scheduled" | "clocked_in" | "tardy" | "clocked_out" | null;
+  clocked_in_at: string | null;
+  can_clock_in: boolean;
+  can_clock_out: boolean;
+  is_active: boolean;
+  seconds_on_shift: number | null;
+  seconds_until_break: number | null;
+  break_available: boolean;
+  seconds_until_shift_end: number | null;
+}
+
 export interface MyShift {
   assignment_id: string;
   shift_id: string;
@@ -208,6 +220,7 @@ export interface MyShift {
   ends_at: string;
   required_skill: Skill;
   status: ShiftStatus;
+  duty: MyShiftDutyInfo | null;
 }
 
 export interface AvailabilityWindowInput {
@@ -251,6 +264,20 @@ export async function createShift(
   payload: ShiftCreatePayload,
 ): Promise<ShiftResponse> {
   const { data } = await api.post<ShiftResponse>(`/locations/${locationId}/shifts`, payload);
+  return data;
+}
+
+export type ShiftUpdatePayload = {
+  version: number;
+  required_skill?: Skill;
+  headcount?: number;
+  local_date?: string;
+  local_start_time?: string;
+  local_end_time?: string;
+};
+
+export async function updateShift(shiftId: string, payload: ShiftUpdatePayload): Promise<ShiftResponse> {
+  const { data } = await api.patch<ShiftResponse>(`/shifts/${shiftId}`, payload);
   return data;
 }
 

@@ -61,6 +61,7 @@ alembic upgrade head
 python -m scripts.seed
 python -m scripts.seed scheduling
 python -m scripts.seed swaps
+python -m scripts.seed duty
 uvicorn app.main:app --reload
 ```
 
