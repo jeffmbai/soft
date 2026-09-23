@@ -119,20 +119,43 @@ jobs:
       - frontend-build
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     environment: production
-    env:
-      DOMAIN: ${{ vars.DOMAIN }}
-      API_DOMAIN: ${{ vars.API_DOMAIN }}
-      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate production config
+      - name: Load production config
+        env:
+          VAR_API_DOMAIN: ${{ vars.API_DOMAIN }}
+          SEC_API_DOMAIN: ${{ secrets.API_DOMAIN }}
+          VAR_DOMAIN: ${{ vars.DOMAIN }}
+          SEC_DOMAIN: ${{ secrets.DOMAIN }}
+          VAR_NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
+          SEC_NEXT_PUBLIC_WS_URL: ${{ secrets.NEXT_PUBLIC_WS_URL }}
         run: |
-          test -n "${API_DOMAIN}" || { echo "::error::Add API_DOMAIN to GitHub → Settings → Environments → production → Variables"; exit 1; }
-          test -n "${NEXT_PUBLIC_WS_URL}" || { echo "::error::Add NEXT_PUBLIC_WS_URL or API_DOMAIN to the production environment"; exit 1; }
-          echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
+          API_DOMAIN="${VAR_API_DOMAIN:-${SEC_API_DOMAIN:-}}"
+          DOMAIN="${VAR_DOMAIN:-${SEC_DOMAIN:-}}"
+          NEXT_PUBLIC_WS_URL="${VAR_NEXT_PUBLIC_WS_URL:-${SEC_NEXT_PUBLIC_WS_URL:-}}"
 
-      - run: echo "GHCR_IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+          if [ -z "${API_DOMAIN}" ]; then
+            echo "::error::API_DOMAIN is not set."
+            echo "Add it here: GitHub repo → Settings → Environments → production"
+            echo "Use the Variables tab (not Secrets), name exactly: API_DOMAIN"
+            echo "Value: softapi.serverops.co.ke"
+            exit 1
+          fi
+
+          if [ -z "${NEXT_PUBLIC_WS_URL}" ]; then
+            NEXT_PUBLIC_WS_URL="wss://${API_DOMAIN}"
+          fi
+
+          {
+            echo "API_DOMAIN=${API_DOMAIN}"
+            echo "DOMAIN=${DOMAIN}"
+            echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
+            echo "GHCR_IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}"
+          } >> "$GITHUB_ENV"
+
+          echo "Using API_DOMAIN=${API_DOMAIN}"
+          echo "Using NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -175,37 +198,75 @@ jobs:
     needs: [publish-images]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     environment: production
-    env:
-      CONTABO_HOST: ${{ secrets.CONTABO_HOST }}
-      CONTABO_USER: ${{ secrets.CONTABO_USER }}
-      CONTABO_SSH_KEY: ${{ secrets.CONTABO_SSH_KEY }}
-      CONTABO_SSH_PORT: ${{ secrets.CONTABO_SSH_PORT || '22' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      IMAGE_TAG: ${{ github.sha }}
-      GHCR_IMAGE_OWNER: ${{ github.repository_owner }}
-      DOMAIN: ${{ vars.DOMAIN }}
-      API_DOMAIN: ${{ vars.API_DOMAIN }}
-      NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL || format('wss://{0}', vars.API_DOMAIN) }}
-      SSL_CERT_DOMAINS: ${{ vars.SSL_CERT_DOMAINS }}
-      CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
-      BACKEND_URL: ${{ vars.BACKEND_URL }}
-      POSTGRES_USER: ${{ vars.POSTGRES_USER }}
-      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
-      POSTGRES_HOST_PORT: ${{ vars.POSTGRES_HOST_PORT }}
-      REDIS_HOST_PORT: ${{ vars.REDIS_HOST_PORT }}
-      BACKEND_HOST_PORT: ${{ vars.BACKEND_HOST_PORT }}
-      FRONTEND_HOST_PORT: ${{ vars.FRONTEND_HOST_PORT }}
-      GATEWAY_SITE_NAME: ${{ vars.GATEWAY_SITE_NAME }}
-      SHARED_PROXY_NETWORK_NAME: ${{ vars.SHARED_PROXY_NETWORK_NAME }}
-      RUN_SEED: ${{ vars.RUN_SEED }}
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
-      GATEWAY_ENABLED: "true"
     steps:
       - uses: actions/checkout@v4
 
+      - name: Load production config
+        env:
+          VAR_API_DOMAIN: ${{ vars.API_DOMAIN }}
+          SEC_API_DOMAIN: ${{ secrets.API_DOMAIN }}
+          VAR_DOMAIN: ${{ vars.DOMAIN }}
+          SEC_DOMAIN: ${{ secrets.DOMAIN }}
+          VAR_NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
+          SEC_NEXT_PUBLIC_WS_URL: ${{ secrets.NEXT_PUBLIC_WS_URL }}
+          VAR_DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          VAR_SSL_CERT_DOMAINS: ${{ vars.SSL_CERT_DOMAINS }}
+          VAR_CORS_ORIGINS: ${{ vars.CORS_ORIGINS }}
+          VAR_BACKEND_URL: ${{ vars.BACKEND_URL }}
+          VAR_POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+          VAR_POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+          VAR_POSTGRES_HOST_PORT: ${{ vars.POSTGRES_HOST_PORT }}
+          VAR_REDIS_HOST_PORT: ${{ vars.REDIS_HOST_PORT }}
+          VAR_BACKEND_HOST_PORT: ${{ vars.BACKEND_HOST_PORT }}
+          VAR_FRONTEND_HOST_PORT: ${{ vars.FRONTEND_HOST_PORT }}
+          VAR_GATEWAY_SITE_NAME: ${{ vars.GATEWAY_SITE_NAME }}
+          VAR_SHARED_PROXY_NETWORK_NAME: ${{ vars.SHARED_PROXY_NETWORK_NAME }}
+          VAR_RUN_SEED: ${{ vars.RUN_SEED }}
+        run: |
+          API_DOMAIN="${VAR_API_DOMAIN:-${SEC_API_DOMAIN:-}}"
+          DOMAIN="${VAR_DOMAIN:-${SEC_DOMAIN:-}}"
+          NEXT_PUBLIC_WS_URL="${VAR_NEXT_PUBLIC_WS_URL:-${SEC_NEXT_PUBLIC_WS_URL:-}}"
+
+          if [ -z "${API_DOMAIN}" ]; then
+            echo "::error::API_DOMAIN is not set in the production environment."
+            exit 1
+          fi
+
+          if [ -z "${NEXT_PUBLIC_WS_URL}" ]; then
+            NEXT_PUBLIC_WS_URL="wss://${API_DOMAIN}"
+          fi
+
+          {
+            echo "API_DOMAIN=${API_DOMAIN}"
+            echo "DOMAIN=${DOMAIN}"
+            echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
+            echo "DEPLOY_PATH=${VAR_DEPLOY_PATH:-/opt/soft}"
+            echo "SSL_CERT_DOMAINS=${VAR_SSL_CERT_DOMAINS:-${DOMAIN},${API_DOMAIN}}"
+            echo "CORS_ORIGINS=${VAR_CORS_ORIGINS:-https://${DOMAIN}}"
+            echo "BACKEND_URL=${VAR_BACKEND_URL:-http://soft-backend:8000}"
+            echo "POSTGRES_USER=${VAR_POSTGRES_USER:-shiftsync}"
+            echo "POSTGRES_DB=${VAR_POSTGRES_DB:-shiftsync}"
+            echo "POSTGRES_HOST_PORT=${VAR_POSTGRES_HOST_PORT:-127.0.0.1:5436}"
+            echo "REDIS_HOST_PORT=${VAR_REDIS_HOST_PORT:-127.0.0.1:6383}"
+            echo "BACKEND_HOST_PORT=${VAR_BACKEND_HOST_PORT:-127.0.0.1:8004}"
+            echo "FRONTEND_HOST_PORT=${VAR_FRONTEND_HOST_PORT:-127.0.0.1:3005}"
+            echo "GATEWAY_SITE_NAME=${VAR_GATEWAY_SITE_NAME:-soft}"
+            echo "SHARED_PROXY_NETWORK_NAME=${VAR_SHARED_PROXY_NETWORK_NAME:-serverops_proxy}"
+            echo "RUN_SEED=${VAR_RUN_SEED:-true}"
+            echo "IMAGE_TAG=${{ github.sha }}"
+            echo "GHCR_IMAGE_OWNER=${{ github.repository_owner }}"
+            echo "GATEWAY_ENABLED=true"
+          } >> "$GITHUB_ENV"
+
       - name: Configure SSH
+        env:
+          CONTABO_HOST: ${{ secrets.CONTABO_HOST }}
+          CONTABO_USER: ${{ secrets.CONTABO_USER }}
+          CONTABO_SSH_KEY: ${{ secrets.CONTABO_SSH_KEY }}
+          CONTABO_SSH_PORT: ${{ secrets.CONTABO_SSH_PORT || '22' }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         run: |
           test -n "$CONTABO_HOST" || { echo "::error::CONTABO_HOST secret is required"; exit 1; }
           test -n "$CONTABO_USER" || { echo "::error::CONTABO_USER secret is required"; exit 1; }
@@ -217,6 +278,12 @@ jobs:
           chmod 600 ~/.ssh/contabo_deploy_key
           ssh-keyscan -p "$CONTABO_SSH_PORT" "$CONTABO_HOST" >> ~/.ssh/known_hosts
           {
+            echo "CONTABO_HOST=${CONTABO_HOST}"
+            echo "CONTABO_USER=${CONTABO_USER}"
+            echo "CONTABO_SSH_PORT=${CONTABO_SSH_PORT:-22}"
+            echo "SECRET_KEY=${SECRET_KEY}"
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            echo "CERTBOT_EMAIL=${CERTBOT_EMAIL}"
             echo "RSYNC_SSH=ssh -i $HOME/.ssh/contabo_deploy_key -p $CONTABO_SSH_PORT -o ServerAliveInterval=15 -o ServerAliveCountMax=120 -o TCPKeepAlive=yes -o StrictHostKeyChecking=accept-new"
             echo "SSH_OPTS=-i $HOME/.ssh/contabo_deploy_key -p $CONTABO_SSH_PORT -o ServerAliveInterval=15 -o ServerAliveCountMax=120 -o TCPKeepAlive=yes -o StrictHostKeyChecking=accept-new"
           } >> "$GITHUB_ENV"
