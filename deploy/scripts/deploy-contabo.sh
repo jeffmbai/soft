@@ -29,12 +29,6 @@ require_var CORS_ORIGINS
 require_var NEXT_PUBLIC_WS_URL
 require_var IMAGE_TAG
 
-# Shared VPS port block (CSRI 5432/6379, CasaRoyal 5433/6380, ServerOps 5434/6381,
-# KitaleFam 5435/6382, Cova/other may use 5436/6383 — keep soft on 5437+).
-POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-127.0.0.1:5437}"
-REDIS_HOST_PORT="${REDIS_HOST_PORT:-127.0.0.1:6384}"
-BACKEND_HOST_PORT="${BACKEND_HOST_PORT:-127.0.0.1:8005}"
-FRONTEND_HOST_PORT="${FRONTEND_HOST_PORT:-127.0.0.1:3006}"
 BACKEND_URL="${BACKEND_URL:-http://soft-backend:8000}"
 GHCR_IMAGE_OWNER="${GHCR_IMAGE_OWNER:-jeffmbai}"
 GATEWAY_SITE_NAME="${GATEWAY_SITE_NAME:-soft}"
@@ -52,10 +46,6 @@ CERT_DOMAIN="${CERT_DOMAIN:-${DOMAIN}}"
   echo "POSTGRES_USER=${POSTGRES_USER}"
   echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
   echo "POSTGRES_DB=${POSTGRES_DB}"
-  echo "POSTGRES_HOST_PORT=${POSTGRES_HOST_PORT}"
-  echo "REDIS_HOST_PORT=${REDIS_HOST_PORT}"
-  echo "BACKEND_HOST_PORT=${BACKEND_HOST_PORT}"
-  echo "FRONTEND_HOST_PORT=${FRONTEND_HOST_PORT}"
   echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
   echo "BACKEND_URL=${BACKEND_URL}"
   echo "GATEWAY_SITE_NAME=${GATEWAY_SITE_NAME}"
@@ -192,15 +182,16 @@ promote_gateway_config() {
 wait_for_backend_health() {
   local attempts="${1:-90}"
   local sleep_seconds="${2:-2}"
-  local health_url="http://${BACKEND_HOST_PORT}/health"
   local i
   local response
 
-  echo "Waiting for backend on ${health_url} ..."
+  echo "Waiting for backend health via docker exec ..."
   sleep 10
 
   for i in $(seq 1 "${attempts}"); do
-    response="$(curl -sS --max-time 5 "${health_url}" 2>/dev/null || true)"
+    response="$("${COMPOSE[@]}" exec -T backend python -c \
+      "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read().decode())" \
+      2>/dev/null || true)"
     if printf '%s' "${response}" | grep -q '"status"'; then
       echo "Backend health check passed after ${i} attempt(s)."
       return 0
@@ -218,12 +209,8 @@ wait_for_backend_health() {
 export SHARED_PROXY_NETWORK_NAME
 ensure_shared_proxy_network
 
-cleanup_stale_soft_containers() {
-  echo "Removing stale ShiftSync containers from previous deploy attempts..."
-  docker rm -f soft-postgres soft-redis soft-backend soft-frontend 2>/dev/null || true
-}
-
-cleanup_stale_soft_containers
+echo "Removing stale ShiftSync containers from previous deploy attempts..."
+docker rm -f soft-postgres soft-redis soft-backend soft-frontend 2>/dev/null || true
 
 "${COMPOSE[@]}" --profile all up -d --remove-orphans postgres redis
 

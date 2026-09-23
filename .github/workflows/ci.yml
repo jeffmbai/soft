@@ -215,10 +215,6 @@ jobs:
           VAR_BACKEND_URL: ${{ vars.BACKEND_URL }}
           VAR_POSTGRES_USER: ${{ vars.POSTGRES_USER }}
           VAR_POSTGRES_DB: ${{ vars.POSTGRES_DB }}
-          VAR_POSTGRES_HOST_PORT: ${{ vars.POSTGRES_HOST_PORT }}
-          VAR_REDIS_HOST_PORT: ${{ vars.REDIS_HOST_PORT }}
-          VAR_BACKEND_HOST_PORT: ${{ vars.BACKEND_HOST_PORT }}
-          VAR_FRONTEND_HOST_PORT: ${{ vars.FRONTEND_HOST_PORT }}
           VAR_GATEWAY_SITE_NAME: ${{ vars.GATEWAY_SITE_NAME }}
           VAR_SHARED_PROXY_NETWORK_NAME: ${{ vars.SHARED_PROXY_NETWORK_NAME }}
           VAR_RUN_SEED: ${{ vars.RUN_SEED }}
@@ -246,10 +242,6 @@ jobs:
             echo "BACKEND_URL=${VAR_BACKEND_URL:-http://soft-backend:8000}"
             echo "POSTGRES_USER=${VAR_POSTGRES_USER:-shiftsync}"
             echo "POSTGRES_DB=${VAR_POSTGRES_DB:-shiftsync}"
-            echo "POSTGRES_HOST_PORT=${VAR_POSTGRES_HOST_PORT:-127.0.0.1:5437}"
-            echo "REDIS_HOST_PORT=${VAR_REDIS_HOST_PORT:-127.0.0.1:6384}"
-            echo "BACKEND_HOST_PORT=${VAR_BACKEND_HOST_PORT:-127.0.0.1:8005}"
-            echo "FRONTEND_HOST_PORT=${VAR_FRONTEND_HOST_PORT:-127.0.0.1:3006}"
             echo "GATEWAY_SITE_NAME=${VAR_GATEWAY_SITE_NAME:-soft}"
             echo "SHARED_PROXY_NETWORK_NAME=${VAR_SHARED_PROXY_NETWORK_NAME:-serverops_proxy}"
             echo "RUN_SEED=${VAR_RUN_SEED:-true}"
@@ -332,10 +324,6 @@ jobs:
              POSTGRES_USER='$POSTGRES_USER' \
              POSTGRES_PASSWORD='$POSTGRES_PASSWORD' \
              POSTGRES_DB='$POSTGRES_DB' \
-             POSTGRES_HOST_PORT='$POSTGRES_HOST_PORT' \
-             REDIS_HOST_PORT='$REDIS_HOST_PORT' \
-             BACKEND_HOST_PORT='$BACKEND_HOST_PORT' \
-             FRONTEND_HOST_PORT='$FRONTEND_HOST_PORT' \
              CERTBOT_EMAIL='$CERTBOT_EMAIL' \
              GATEWAY_ENABLED='$GATEWAY_ENABLED' \
              GATEWAY_SITE_NAME='$GATEWAY_SITE_NAME' \
