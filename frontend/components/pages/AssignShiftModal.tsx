@@ -22,6 +22,7 @@ import {
 import { hoursLeft, isShiftPast, shiftHours } from "@/lib/schedule-utils";
 import { initials } from "@/lib/staff-utils";
 import { cn } from "@/lib/cn";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 type Props = {
   shift: ShiftResponse;
@@ -79,12 +80,14 @@ export default function AssignShiftModal({
     mutationFn: () => assignShift(shift.id, selectedId!),
     onSuccess: (res) => {
       if (res.success) {
+        toastSuccess("Staff assigned", "Shift assignment saved.");
         onAssigned();
         onClose();
       } else {
         setPreview(res);
       }
     },
+    onError: (err) => toastApiError(err, "Could not assign staff"),
   });
 
   const roleLabel = SKILL_LABELS[shift.required_skill];

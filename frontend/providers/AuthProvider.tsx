@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { fetchMe, login as apiLogin, logout as apiLogout, type User } from "@/lib/api";
+import { toastSuccess } from "@/lib/toast";
 
 interface AuthContextValue {
   user: User | null;
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
+    toastSuccess("Signed out");
     router.replace("/login");
   }, [router]);
 

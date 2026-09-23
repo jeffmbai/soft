@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { initials } from "@/lib/staff-utils";
 import { cn } from "@/lib/cn";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 function tzLabel(timezone: string) {
   return timezone.split("/").pop()?.replace("_", " ") ?? timezone;
@@ -34,7 +35,9 @@ function LocationCard({
     onSuccess: () => {
       onSaved();
       setEditing(false);
+      toastSuccess("Managers updated", `${location.name} manager assignments saved.`);
     },
+    onError: (err) => toastApiError(err, "Could not save managers"),
   });
 
   const toggle = (id: string) => {

@@ -19,3 +19,6 @@ export { default as Drawer, DrawerCloseButton } from "./Drawer";
 export { default as Timeline } from "./Timeline";
 export type { TimelineItem } from "./Timeline";
 export { default as FormField } from "./FormField";
+export { default as ConfirmationModal } from "./ConfirmationModal";
+export type { ConfirmationVariant } from "./ConfirmationModal";
+export { default as Toaster } from "./Toaster";

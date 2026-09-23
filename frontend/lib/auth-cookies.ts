@@ -52,7 +52,7 @@ export const ROLE_ROUTES: Record<string, UserRole[]> = {
   "/dashboard": ["admin", "manager"],
   "/my-schedule": ["staff"],
   "/availability": ["staff"],
-  "/open-shifts": ["staff"],
+  "/open-shifts": ["admin", "manager", "staff"],
 };
 
 export function roleAllowedOnPath(role: UserRole, pathname: string): boolean {

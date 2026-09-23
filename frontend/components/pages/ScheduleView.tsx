@@ -27,6 +27,8 @@ import {
 } from "@/lib/api";
 import { addDays, isDatePast, isShiftPast } from "@/lib/schedule-utils";
 import { cn } from "@/lib/cn";
+import { liveQueryOptions, SCHEDULE_QUERY_MS } from "@/lib/live-query";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 
 const SKILLS: Skill[] = ["bartender", "line_cook", "server", "host"];
 
@@ -76,11 +78,16 @@ export default function ScheduleView() {
     queryKey: ["schedule", activeLocationId, weekStart],
     queryFn: () => fetchSchedule(activeLocationId, weekStart),
     enabled: !!activeLocationId,
+    ...liveQueryOptions(SCHEDULE_QUERY_MS),
   });
 
   const publish = useMutation({
     mutationFn: () => publishWeek(activeLocationId, weekStart),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["schedule", activeLocationId, weekStart] });
+      toastSuccess("Week published", "Staff can now see their shifts.");
+    },
+    onError: (err) => toastApiError(err, "Could not publish week"),
   });
 
   useEffect(() => {

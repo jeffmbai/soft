@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import StaffDetailPanel from "@/components/pages/StaffDetailPanel";
 import StaffFormModal from "@/components/pages/StaffFormModal";
@@ -32,15 +31,7 @@ import {
 } from "@/lib/api";
 import { CERT_OPTIONS, SKILL_OPTIONS, toStaffMemberUI, type StaffMemberUI } from "@/lib/staff-utils";
 import { cn } from "@/lib/cn";
-
-function apiErrorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const detail = err.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) return detail.map((d: { msg?: string }) => d.msg).join(", ");
-  }
-  return "Something went wrong";
-}
+import { apiErrorMessage, toastApiError, toastSuccess } from "@/lib/toast";
 
 export default function UsersView() {
   const queryClient = useQueryClient();
@@ -104,7 +95,9 @@ export default function UsersView() {
     onSuccess: () => {
       void invalidate();
       setFormOpen(false);
+      toastSuccess("Staff member added");
     },
+    onError: (err) => toastApiError(err, "Could not add staff member"),
   });
 
   const updateMutation = useMutation({
@@ -114,7 +107,9 @@ export default function UsersView() {
       void invalidate();
       setFormOpen(false);
       setEditTarget(null);
+      toastSuccess("Staff member updated");
     },
+    onError: (err) => toastApiError(err, "Could not update staff member"),
   });
 
   const deleteMutation = useMutation({
@@ -122,17 +117,24 @@ export default function UsersView() {
     onSuccess: () => {
       void invalidate();
       setSelectedId(null);
+      toastSuccess("Staff member removed");
     },
+    onError: (err) => toastApiError(err, "Could not remove staff member"),
   });
 
   async function handleExport() {
-    const blob = await exportStaffCsv(listParams);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "staff-roster.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await exportStaffCsv(listParams);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "staff-roster.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      toastSuccess("Export started", "Staff roster CSV downloaded.");
+    } catch (err) {
+      toastApiError(err, "Could not export roster");
+    }
   }
 
   function clearFilters() {

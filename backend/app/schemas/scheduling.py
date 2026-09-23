@@ -127,3 +127,14 @@ class AvailabilityResponse(BaseModel):
     timezone: str
     windows: list[AvailabilityWindowInput]
     exceptions: list[AvailabilityExceptionInput]
+
+
+class AuditLogResponse(BaseModel):
+    id: UUID
+    entity_type: str
+    actor_id: UUID | None
+    before_state: dict | None
+    after_state: dict | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -4,6 +4,7 @@ import { Suspense, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import Loading from "@/components/Loading";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 function LoginForm() {
   const { login } = useAuth();
@@ -20,10 +21,12 @@ function LoginForm() {
     setSubmitting(true);
     try {
       await login(email, password);
+      toastSuccess("Signed in");
       const from = searchParams.get("from");
       router.replace(from && from !== "/login" ? from : "/");
     } catch {
       setError("Invalid email or password");
+      toastError("Sign in failed", "Invalid email or password");
     } finally {
       setSubmitting(false);
     }
