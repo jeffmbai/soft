@@ -69,7 +69,7 @@ Full project documentation is in [`docs/`](docs/README.md):
 | [Workflows](docs/workflows.md) | Flowcharts for scheduling, swaps, duty, audit |
 | [Role Permissions](docs/role-permissions.md) | Route and API access matrix |
 | [API Reference](docs/api-reference.md) | Endpoint summary |
-| [Development Guide](docs/development.md) | Local setup, migrations, seed data |
+| [Development Guide](docs/development.md) | Local setup, migrations, seed data 
 
 ## Local Development (without Docker)
 
