@@ -36,6 +36,7 @@ export function useDutyFloor() {
           };
           if ((msg.type === "snapshot" || msg.type === "update") && msg.data) {
             queryClient.setQueryData(DUTY_QUERY_KEY, msg.data);
+            void queryClient.invalidateQueries({ queryKey: ["duty-summary"] });
           }
         };
         ws.onclose = () => {

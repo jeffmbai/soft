@@ -132,7 +132,14 @@ export default function MyScheduleView() {
   const { data: shifts, isLoading, refetch } = useQuery({
     queryKey: ["my-shifts", "upcoming"],
     queryFn: () => fetchMyShifts({ upcoming: true }),
-    ...liveQueryOptions(SCHEDULE_QUERY_MS),
+    refetchInterval: (query) => {
+      const list = query.state.data ?? [];
+      const hasActive = list.some((s) => s.duty?.is_active);
+      return hasActive ? 10_000 : SCHEDULE_QUERY_MS;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const activeShift = useMemo(

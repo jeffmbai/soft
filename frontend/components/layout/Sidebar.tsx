@@ -21,7 +21,7 @@ const navSections: Record<string, { title: string; hrefs: string[] }> = {
   },
   operations: {
     title: "Operations",
-    hrefs: ["/schedule", "/on-duty", "/open-shifts", "/swaps", "/my-schedule", "/availability"],
+    hrefs: ["/schedule", "/on-duty", "/open-shifts", "/swaps", "/audit", "/my-schedule", "/availability"],
   },
   
   admin: {

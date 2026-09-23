@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, availability, duty, locations, notifications, scheduling, staff, swaps, ws
+from app.routers import audit, auth, availability, duty, locations, notifications, scheduling, staff, swaps, ws
 from app.services.redis_bus import close_redis
 from app.routers.ws import start_redis_listener, stop_redis_listener
 
@@ -31,6 +31,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(staff.router, prefix="/api")
 app.include_router(scheduling.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
 app.include_router(availability.router, prefix="/api")
 app.include_router(swaps.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
@@ -40,4 +41,15 @@ app.include_router(ws.router, prefix="/api")
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from app.services.redis_bus import get_redis
+
+    redis_ok = False
+    try:
+        redis_ok = await get_redis().ping()
+    except Exception:
+        redis_ok = False
+
+    return {
+        "status": "ok" if redis_ok else "degraded",
+        "redis": "up" if redis_ok else "down",
+    }

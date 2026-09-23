@@ -28,8 +28,8 @@ export function decodeAccessToken(token: string): { role: UserRole; sub: string 
   }
 }
 
-export function homePathForRole(role: UserRole): string {
-  return role === "staff" ? "/my-schedule" : "/dashboard";
+export function homePathForRole(_role: UserRole): string {
+  return "/dashboard";
 }
 
 export const ROLE_ROUTES: Record<string, UserRole[]> = {
@@ -38,7 +38,8 @@ export const ROLE_ROUTES: Record<string, UserRole[]> = {
   "/schedule": ["admin", "manager"],
   "/swaps": ["admin", "manager"],
   "/on-duty": ["admin", "manager"],
-  "/dashboard": ["admin", "manager"],
+  "/audit": ["admin", "manager"],
+  "/dashboard": ["admin", "manager", "staff"],
   "/my-schedule": ["staff"],
   "/availability": ["staff"],
   "/open-shifts": ["admin", "manager", "staff"],

@@ -281,6 +281,39 @@ export async function updateShift(shiftId: string, payload: ShiftUpdatePayload):
   return data;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  entity_type: string;
+  actor_id: string | null;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AuditLogListItem extends AuditLogEntry {
+  actor_name: string | null;
+  location_id: string | null;
+  location_name: string | null;
+  shift_id: string | null;
+}
+
+export type AuditLogParams = {
+  location_id?: string;
+  entity_type?: "shift" | "assignment" | "swap_request" | "schedule_week";
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchShiftHistory(shiftId: string): Promise<AuditLogEntry[]> {
+  const { data } = await api.get<AuditLogEntry[]>(`/shifts/${shiftId}/history`);
+  return data;
+}
+
+export async function fetchAuditLogs(params?: AuditLogParams): Promise<AuditLogListItem[]> {
+  const { data } = await api.get<AuditLogListItem[]>("/audit", { params });
+  return data;
+}
+
 export async function assignShift(shiftId: string, userId: string, overrideReason?: string): Promise<AssignResult> {
   const { data } = await api.post<AssignResult>(`/shifts/${shiftId}/assign`, {
     user_id: userId,
