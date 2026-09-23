@@ -36,7 +36,7 @@ export const mainNav: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: "dashboard",
-    roles: ["admin", "manager"],
+    roles: ["admin", "manager", "staff"],
   },
   {
     href: "/my-schedule",
@@ -55,6 +55,12 @@ export const mainNav: NavItem[] = [
     label: "Locations",
     icon: "location_on",
     roles: ["admin"],
+  },
+  {
+    href: "/audit",
+    label: "Audit Log",
+    icon: "history",
+    roles: ["admin", "manager"],
   },
 ];
 

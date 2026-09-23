@@ -1,10 +1,7 @@
 export function getWsBaseUrl(): string {
-  if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_WS_URL) {
-    return process.env.NEXT_PUBLIC_WS_URL;
+  const configured = process.env.NEXT_PUBLIC_WS_URL;
+  if (!configured) {
+    throw new Error("NEXT_PUBLIC_WS_URL must be set");
   }
-  if (typeof window !== "undefined") {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.hostname}:8000`;
-  }
-  return process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+  return configured;
 }

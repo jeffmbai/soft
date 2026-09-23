@@ -2,9 +2,10 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import ShiftHistoryPanel from "@/components/ShiftHistoryPanel";
 import Drawer, { DrawerCloseButton } from "@/components/ui/Drawer";
 import Button from "@/components/ui/Button";
-import { AlertBanner } from "@/components/ui";
+import { AlertBanner, SegmentedControl } from "@/components/ui";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   SKILL_LABELS,
@@ -42,6 +43,7 @@ export default function EditShiftDrawer({
   const [skill, setSkill] = useState<Skill>("server");
   const [headcount, setHeadcount] = useState(1);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"details" | "history">("details");
 
   useEffect(() => {
     if (!open || !shift || !location) return;
@@ -51,6 +53,7 @@ export default function EditShiftDrawer({
     setSkill(shift.required_skill);
     setHeadcount(shift.headcount);
     setError("");
+    setTab("details");
   }, [open, shift, location]);
 
   const save = useMutation({
@@ -68,6 +71,7 @@ export default function EditShiftDrawer({
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["schedule"] });
+      if (shift) void qc.invalidateQueries({ queryKey: ["shift-history", shift.id] });
       toastSuccess("Shift updated");
       onUpdated();
       onClose();
@@ -105,98 +109,119 @@ export default function EditShiftDrawer({
       onClose={onClose}
       header={header}
       footer={
-        <div className="flex gap-2 justify-between w-full">
-          <div>
-            {slotsOpen > 0 && onAssign && (
-              <Button variant="outline" onClick={onAssign}>
-                Assign staff ({slotsOpen} open)
+        tab === "details" ? (
+          <div className="flex gap-2 justify-between w-full">
+            <div>
+              {slotsOpen > 0 && onAssign && (
+                <Button variant="outline" onClick={onAssign}>
+                  Assign staff ({slotsOpen} open)
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
+                {save.isPending ? "Saving…" : "Save changes"}
               </Button>
-            )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Saving…" : "Save changes"}
-            </Button>
+        ) : (
+          <div className="flex justify-end w-full">
+            <Button variant="outline" onClick={onClose}>Close</Button>
           </div>
-        </div>
+        )
       }
     >
       <div className="p-5 space-y-5">
-        <AlertBanner
-          variant="info"
-          icon="info"
-          title="Filled shifts can be edited"
-          description="Update times, role, or headcount. Headcount cannot drop below current assignments."
+        <SegmentedControl
+          value={tab}
+          onChange={(v) => setTab(v as "details" | "history")}
+          options={[
+            { id: "details", label: "Details" },
+            { id: "history", label: "Audit history" },
+          ]}
         />
 
-        {shift.assignments.length > 0 && (
-          <div className="rounded-xl border border-outline-variant p-3 space-y-1">
-            <p className="text-[10px] uppercase tracking-wider text-outline font-data-mono">Assigned</p>
-            {shift.assignments.map((a) => (
-              <p key={a.id} className="text-sm text-primary font-medium">{a.user_name}</p>
-            ))}
-          </div>
+        {tab === "history" ? (
+          <ShiftHistoryPanel shiftId={shift.id} timezone={location.timezone} />
+        ) : (
+          <>
+            <AlertBanner
+              variant="info"
+              icon="info"
+              title="Filled shifts can be edited"
+              description="Update times, role, or headcount. Headcount cannot drop below current assignments."
+            />
+
+            {shift.assignments.length > 0 && (
+              <div className="rounded-xl border border-outline-variant p-3 space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-outline font-data-mono">Assigned</p>
+                {shift.assignments.map((a) => (
+                  <p key={a.id} className="text-sm text-primary font-medium">{a.user_name}</p>
+                ))}
+              </div>
+            )}
+
+            <div>
+              <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Date</label>
+              <input
+                type="date"
+                value={localDate}
+                onChange={(e) => setLocalDate(e.target.value)}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Start ({tzLabel})</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
+                />
+              </div>
+              <div>
+                <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">End ({tzLabel})</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Role required</label>
+              <select
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
+                value={skill}
+                onChange={(e) => setSkill(e.target.value as Skill)}
+              >
+                {SKILLS.map((s) => (
+                  <option key={s} value={s}>{SKILL_LABELS[s]}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Headcount</label>
+              <input
+                type="number"
+                min={Math.max(1, filled)}
+                max={20}
+                value={headcount}
+                onChange={(e) => setHeadcount(Number(e.target.value))}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
+              />
+              <p className="text-xs text-on-surface-variant mt-1">Minimum {filled} (current assignments)</p>
+            </div>
+
+            {error && <AlertBanner variant="error" title="Could not update shift" description={error} />}
+          </>
         )}
-
-        <div>
-          <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Date</label>
-          <input
-            type="date"
-            value={localDate}
-            onChange={(e) => setLocalDate(e.target.value)}
-            className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Start ({tzLabel})</label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
-            />
-          </div>
-          <div>
-            <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">End ({tzLabel})</label>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Role required</label>
-          <select
-            className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
-            value={skill}
-            onChange={(e) => setSkill(e.target.value as Skill)}
-          >
-            {SKILLS.map((s) => (
-              <option key={s} value={s}>{SKILL_LABELS[s]}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="font-data-mono text-[10px] uppercase tracking-wider text-outline">Headcount</label>
-          <input
-            type="number"
-            min={Math.max(1, filled)}
-            max={20}
-            value={headcount}
-            onChange={(e) => setHeadcount(Number(e.target.value))}
-            className="mt-1 w-full px-3 py-2.5 rounded-xl border border-outline-variant bg-surface-container-lowest"
-          />
-          <p className="text-xs text-on-surface-variant mt-1">Minimum {filled} (current assignments)</p>
-        </div>
-
-        {error && <AlertBanner variant="error" title="Could not update shift" description={error} />}
       </div>
     </Drawer>
   );

@@ -154,3 +154,10 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AuditLogListItem(AuditLogResponse):
+    actor_name: str | None = None
+    location_id: UUID | None = None
+    location_name: str | None = None
+    shift_id: UUID | None = None
