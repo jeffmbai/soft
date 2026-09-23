@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import Icon from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
+import { fetchSwapRequests } from "@/lib/api";
+import { liveQueryOptions } from "@/lib/live-query";
 import { useScheduleUiStore } from "@/stores/scheduleUiStore";
 import { mainNav, type NavItem } from "./nav-config";
 
@@ -27,7 +30,7 @@ const navSections: Record<string, { title: string; hrefs: string[] }> = {
   },
 };
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
   return (
     <Link
       href={item.href}
@@ -52,9 +55,9 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
       {item.pulse && active && (
         <span className="w-2 h-2 rounded-full bg-secondary animate-pulse shrink-0" />
       )}
-      {item.badge && (
-        <span className="shrink-0 bg-error/10 text-error font-badge-mono text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-          {item.badge.replace(" urgent", "")}
+      {badge != null && badge > 0 && (
+        <span className="shrink-0 bg-slate-800 text-white font-badge-mono text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+          {badge > 9 ? "9+" : badge}
         </span>
       )}
     </Link>
@@ -66,6 +69,16 @@ export default function Sidebar({ role }: SidebarProps) {
   const triggerPublish = useScheduleUiStore((s) => s.triggerPublish);
   const isSchedule = pathname.startsWith("/schedule");
   const items = mainNav.filter((item) => item.roles.includes(role));
+  const canManageSwaps = role === "admin" || role === "manager";
+
+  const { data: swapRequests } = useQuery({
+    queryKey: ["swap-requests"],
+    queryFn: fetchSwapRequests,
+    enabled: canManageSwaps,
+    ...liveQueryOptions(),
+  });
+  const pendingApprovals =
+    swapRequests?.filter((r) => r.status === "pending_manager").length ?? 0;
 
   const sections = Object.values(navSections)
     .map((section) => ({
@@ -126,6 +139,7 @@ export default function Sidebar({ role }: SidebarProps) {
                   key={item.href}
                   item={item}
                   active={pathname === item.href || (item.href === "/open-shifts" && pathname === "/swaps")}
+                  badge={item.href === "/open-shifts" ? pendingApprovals : undefined}
                 />
               ))}
             </div>

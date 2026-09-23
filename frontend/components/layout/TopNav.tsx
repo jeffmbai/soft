@@ -3,76 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/ui/Icon";
-import LocationTabs from "@/components/layout/LocationTabs";
 import NotificationsMenu from "@/components/layout/NotificationsMenu";
 import UserMenu from "@/components/layout/UserMenu";
+import { titleForPath } from "@/components/layout/nav-config";
+import { useDutySummary } from "@/hooks/useDutySummary";
 import { useScheduleUiStore } from "@/stores/scheduleUiStore";
-import { cn } from "@/lib/cn";
-
 type TopNavProps = {
-  userName?: string;
-  userRole?: string;
+  userName: string;
+  userRole: "admin" | "manager" | "staff";
   onLogout?: () => void;
 };
 
-const pageTitles: Record<string, string> = {
-  "/schedule": "Weekly Matrix",
-  "/on-duty": "Live Floor & Duty",
-  "/open-shifts": "Open Shifts Pool",
-  "/swaps": "Open Shifts Pool",
-  "/users": "Staff Roster",
-  "/dashboard": "Dashboard",
-  "/locations": "Locations",
-  "/my-schedule": "My Schedule",
-  "/availability": "Availability",
-  "/profile": "Profile",
-  "/settings": "Settings",
-};
-
-function NavIconLink({
-  href,
-  icon,
-  label,
-  active,
-}: {
-  href: string;
-  icon: string;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      title={label}
-      className={cn(
-        "flex items-center gap-1.5 h-9 px-3 rounded-xl font-label-md text-label-md font-medium transition-colors",
-        active
-          ? "bg-secondary/15 text-secondary"
-          : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low",
-      )}
-    >
-      <Icon name={icon} size={18} />
-      <span className="hidden lg:inline">{label}</span>
-    </Link>
-  );
-}
-
-function pageTitle(pathname: string) {
-  return pageTitles[pathname] ?? "ShiftSync";
-}
-
-export default function TopNav({
-  userName = "Manager",
-  userRole = "manager",
-  onLogout,
-}: TopNavProps) {
+export default function TopNav({ userName, userRole, onLogout }: TopNavProps) {
   const pathname = usePathname();
   const openAddShift = useScheduleUiStore((s) => s.openAddShift);
-  const title = pageTitle(pathname);
+  const title = titleForPath(pathname);
   const isSchedule = pathname.startsWith("/schedule");
   const isRoster = pathname.startsWith("/users");
   const minimalNav = isRoster;
-  const canAddShift = isSchedule && (userRole === "admin" || userRole === "manager");
+  const canManageDuty = userRole === "admin" || userRole === "manager";
+  const canAddShift = isSchedule && canManageDuty;
+
+  const { data: dutySummary } = useDutySummary(canManageDuty);
 
   return (
     <header className="sticky top-0 z-40 h-[60px] flex items-center gap-4 px-5 bg-surface-container-lowest/90 backdrop-blur-md border-b border-outline-variant/70 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
@@ -89,45 +41,32 @@ export default function TopNav({
         <>
           <div className="hidden sm:block h-8 w-px bg-outline-variant/60 shrink-0" />
 
-          <div className="relative flex-1 max-w-md min-w-0 hidden md:block">
-            <Icon
-              name="search"
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none"
-            />
-            <input
-              type="text"
-              placeholder="Search shifts, staff, units…"
-              className="w-full h-9 pl-9 pr-4 text-body-sm bg-surface-container-low/80 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:bg-surface-container-lowest placeholder:text-outline/80 transition-all"
-            />
-          </div>
-
-          <div className="hidden lg:block shrink-0">
-            <LocationTabs active="west" compact={isSchedule} />
-          </div>
-
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/8 border border-secondary/20 shrink-0">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary" />
-            </span>
-            <span className="font-label-md text-label-md text-secondary font-semibold whitespace-nowrap">
-              18 on duty
-            </span>
-          </div>
+          {canManageDuty && dutySummary && dutySummary.active_shifts > 0 && (
+            <Link
+              href="/on-duty"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 shrink-0 hover:bg-slate-50 transition-colors"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-500 opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-800" />
+              </span>
+              <span className="font-label-md text-label-md text-slate-700 font-medium whitespace-nowrap">
+                {dutySummary.total_clocked_in} on duty
+                {dutySummary.total_tardy > 0 && (
+                  <span className="text-slate-500"> · {dutySummary.total_tardy} tardy</span>
+                )}
+                {dutySummary.total_gaps > 0 && (
+                  <span className="text-slate-500"> · {dutySummary.total_gaps} gaps</span>
+                )}
+              </span>
+            </Link>
+          )}
         </>
       )}
 
       <div className="flex items-center gap-1 shrink-0 ml-auto">
         {!minimalNav && (
           <>
-            {isSchedule && (
-              <span className="hidden lg:flex items-center gap-1 mr-1 px-2 py-1 rounded-full bg-surface-container-high text-[10px] font-badge-mono text-badge-mono text-on-surface-variant">
-                <Icon name="lock_clock" size={13} className="text-secondary" />
-                48h freeze
-              </span>
-            )}
-
             <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-full bg-surface-container-low border border-outline-variant/60">
               <NotificationsMenu />
             </div>
@@ -142,14 +81,8 @@ export default function TopNav({
                 <span className="hidden lg:inline">Add Shift</span>
               </button>
             )}
-
-           
           </>
         )}
-
-        
-
-      
 
         <UserMenu name={userName} role={userRole} onLogout={onLogout} />
       </div>

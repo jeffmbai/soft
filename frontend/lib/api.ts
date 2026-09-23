@@ -451,6 +451,92 @@ export async function updateNotificationPreferences(
   return data;
 }
 
+export type DutyStaffStatus = "scheduled" | "clocked_in" | "tardy" | "clocked_out";
+
+export interface DutyStaffMember {
+  assignment_id: string;
+  user_id: string;
+  name: string;
+  initials: string;
+  skill: string;
+  shift_starts_at: string;
+  shift_ends_at: string;
+  status: DutyStaffStatus;
+  clocked_in_at: string | null;
+  can_clock_in: boolean;
+  can_clock_out: boolean;
+}
+
+export interface DutyShiftGroup {
+  shift_id: string;
+  location_id: string;
+  location_name: string;
+  skill: string;
+  starts_at: string;
+  ends_at: string;
+  headcount: number;
+  assigned: number;
+  gaps: number;
+  staff: DutyStaffMember[];
+}
+
+export interface DutyLocationSummary {
+  location_id: string;
+  name: string;
+  timezone: string;
+  scheduled_count: number;
+  clocked_in_count: number;
+  tardy_count: number;
+  gap_count: number;
+  active_shifts: number;
+}
+
+export interface DutyActivityItem {
+  id: string;
+  at: string;
+  label: string;
+  tone: "ok" | "warn" | "error" | "neutral";
+}
+
+export interface DutyFloorResponse {
+  updated_at: string;
+  total_clocked_in: number;
+  locations: DutyLocationSummary[];
+  shifts: DutyShiftGroup[];
+  activity: DutyActivityItem[];
+}
+
+export interface DutySummaryResponse {
+  total_clocked_in: number;
+  total_scheduled: number;
+  total_tardy: number;
+  total_gaps: number;
+  active_shifts: number;
+}
+
+export async function fetchDutyFloor(): Promise<DutyFloorResponse> {
+  const { data } = await api.get<DutyFloorResponse>("/duty/floor");
+  return data;
+}
+
+export async function fetchDutySummary(): Promise<DutySummaryResponse> {
+  const { data } = await api.get<DutySummaryResponse>("/duty/summary");
+  return data;
+}
+
+export async function fetchDutyWsToken(): Promise<{ token: string; expires_in: number }> {
+  const { data } = await api.post<{ token: string; expires_in: number }>("/duty/ws-token");
+  return data;
+}
+
+export async function dutyClockIn(assignmentId: string): Promise<void> {
+  await api.post("/duty/clock-in", { assignment_id: assignmentId });
+}
+
+export async function dutyClockOut(assignmentId: string): Promise<void> {
+  await api.post("/duty/clock-out", { assignment_id: assignmentId });
+}
+
 export const SWAP_STATUS_LABELS: Record<SwapStatus, string> = {
   pending_counterparty: "Awaiting peer",
   pending_manager: "Awaiting manager",

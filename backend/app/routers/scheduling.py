@@ -33,6 +33,7 @@ from app.services.access import get_accessible_location_ids, require_location_ac
 from app.services.audit import log_change
 from app.services.concurrency import count_shift_assignments, lock_shift
 from app.services.constraints import suggest_alternatives, validate_assignment
+from app.services.duty import notify_duty_change
 from app.services.swaps import cancel_swaps_for_shift
 
 router = APIRouter(tags=["scheduling"])
@@ -298,6 +299,7 @@ async def assign_staff(
         after={"user_id": str(body.user_id), "user_name": staff.name if staff else ""},
     )
     await db.commit()
+    await notify_duty_change()
     await db.refresh(assignment)
     return _to_assign_result(result, assignment.id)
 
@@ -352,6 +354,7 @@ async def unassign(
     await require_location_access(shift.location_id, user, db)
     await db.delete(assignment)
     await db.commit()
+    await notify_duty_change()
 
 
 @router.post(
@@ -403,6 +406,7 @@ async def publish_week(
         after={"week_start": week_start.isoformat(), "shifts": len(shifts)},
     )
     await db.commit()
+    await notify_duty_change()
     return PublishWeekResponse(
         location_id=location_id,
         week_start=week_start,
@@ -449,6 +453,7 @@ async def unpublish_week(
         schedule_week.published_by = None
 
     await db.commit()
+    await notify_duty_change()
     return PublishWeekResponse(
         location_id=location_id,
         week_start=week_start,

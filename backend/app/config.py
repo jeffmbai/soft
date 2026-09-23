@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    redis_url: str = "redis://localhost:6379/0"
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -11,3 +11,4 @@ from app.models.shift import Shift, ShiftAssignment, ScheduleWeek
 from app.models.swap import SwapRequest
 from app.models.notification import Notification, EmailOutbox, NotificationPreference
 from app.models.audit import AuditLog
+from app.models.duty import DutyClock
